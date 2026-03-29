@@ -3006,6 +3006,14 @@
       scale: var(--tw-scale-x) var(--tw-scale-y);
     }
   }
+  .disabled\:scale-100 {
+    &:disabled {
+      --tw-scale-x: 100%;
+      --tw-scale-y: 100%;
+      --tw-scale-z: 100%;
+      scale: var(--tw-scale-x) var(--tw-scale-y);
+    }
+  }
   .disabled\:cursor-not-allowed {
     &:disabled {
       cursor: not-allowed;
@@ -3019,6 +3027,11 @@
   .disabled\:opacity-50 {
     &:disabled {
       opacity: 50%;
+    }
+  }
+  .disabled\:opacity-60 {
+    &:disabled {
+      opacity: 60%;
     }
   }
   .disabled\:opacity-70 {

@@ -72,7 +72,7 @@ const INITIAL_PATIENTS = [
 ];
 
 import { useAuth } from '@/lib/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { supabase, getClientSupabase } from '@/lib/supabase';
 
 export default function Home() {
   const { user, signOut, loading: authLoading } = useAuth();
@@ -605,9 +605,10 @@ export default function Home() {
   const COLORS_ARRAY = ['bg-emerald-500', 'bg-indigo-500', 'bg-blue-500', 'bg-rose-500', 'bg-amber-500', 'bg-purple-500'];
 
   const handleSaveInventoryItem = async (data: any) => {
-    if (!supabase) return;
+    const sb = getClientSupabase();
+    if (!sb) throw new Error('Não foi possível conectar ao banco de dados. Recarregue a página.');
     try {
-      if (!user) throw new Error('User not authenticated');
+      if (!user) throw new Error('Usuário não autenticado.');
 
       const itemData = {
         name: data.name,
@@ -621,11 +622,11 @@ export default function Home() {
 
       if (data.id) {
         // Prevent editing quantity directly if handled by transactions, but fallback available
-        const { error } = await supabase.from('inventory_items').update(itemData).eq('id', data.id);
+        const { error } = await sb.from('inventory_items').update(itemData).eq('id', data.id);
         if (error) throw error;
         setInventoryItems(prev => prev.map(i => i.id === data.id ? { ...i, ...data } : i));
       } else {
-        const { data: newItem, error } = await supabase
+        const { data: newItem, error } = await sb
           .from('inventory_items')
           .insert([{ ...itemData, created_by: user.id }])
           .select()
@@ -635,16 +636,17 @@ export default function Home() {
           setInventoryItems(prev => [{ ...newItem, color: COLORS_ARRAY[Math.floor(Math.random() * COLORS_ARRAY.length)] }, ...prev]);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving inventory item:', error);
-      alert('Erro ao salvar produto.');
+      throw error; // Re-throw para o InventoryView capturar e exibir ao usuário
     }
   };
 
   const handleDeleteInventoryItem = async (id: string) => {
-    if (!supabase) return;
+    const sb = getClientSupabase();
+    if (!sb) return;
     try {
-      const { error } = await supabase.from('inventory_items').delete().eq('id', id);
+      const { error } = await sb.from('inventory_items').delete().eq('id', id);
       if (error) throw error;
       setInventoryItems(prev => prev.filter(i => i.id !== id));
       await logAction({ action: 'DELETE', entityType: 'INVENTORY', details: { summary: 'Item de estoque excluído', id } });
@@ -655,9 +657,10 @@ export default function Home() {
   };
 
   const handleAddInventoryTransaction = async (data: any) => {
-    if (!supabase || !user) return;
+    const sb = getClientSupabase();
+    if (!sb || !user) return;
     try {
-      const { error: transactionError } = await supabase.from('inventory_transactions').insert([{
+      const { error: transactionError } = await sb.from('inventory_transactions').insert([{
         item_id: data.item_id,
         type: data.type,
         quantity: data.quantity,
@@ -673,7 +676,7 @@ export default function Home() {
           const newQty = Math.max(0, item.quantity + change);
           
           // Background update to DB
-          supabase!.from('inventory_items').update({ quantity: newQty, updated_at: new Date().toISOString() }).eq('id', item.id).then();
+          sb.from('inventory_items').update({ quantity: newQty, updated_at: new Date().toISOString() }).eq('id', item.id).then();
           
           return { ...item, quantity: newQty };
         }
@@ -681,7 +684,7 @@ export default function Home() {
       }));
     } catch (error) {
       console.error('Error adding transaction:', error);
-      alert('Erro ao registrar transação.');
+      throw error;
     }
   };
 

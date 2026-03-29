@@ -18,5 +18,12 @@ export const getSupabase = () => {
   return supabaseInstance;
 };
 
-// Export a constant for convenience, but it might be null
+// Sempre usa getSupabase() para garantir que o cliente seja inicializado no contexto correto
+// O singleton no módulo pode ser null se for avaliado no servidor (SSR)
 export const supabase = typeof window !== 'undefined' ? getSupabase() : null;
+
+// Helper para uso seguro em handlers do cliente
+export const getClientSupabase = () => {
+  if (typeof window === 'undefined') return null;
+  return getSupabase();
+};

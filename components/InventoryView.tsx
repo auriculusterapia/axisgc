@@ -59,6 +59,7 @@ export default function InventoryView({
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Form State - Item
   const [itemFormData, setItemFormData] = useState({
@@ -117,17 +118,33 @@ export default function InventoryView({
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSaveItem({
-      ...itemFormData,
-      id: editingItem?.id
-    });
-    setIsItemModalOpen(false);
+    setIsSaving(true);
+    try {
+      await onSaveItem({
+        ...itemFormData,
+        id: editingItem?.id
+      });
+      setIsItemModalOpen(false);
+    } catch (err: any) {
+      console.error('InventoryView: Erro ao salvar produto:', err);
+      alert(err?.message || 'Erro ao salvar produto. Verifique o console.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSaveTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onAddTransaction(transactionFormData);
-    setIsTransactionModalOpen(false);
+    setIsSaving(true);
+    try {
+      await onAddTransaction(transactionFormData);
+      setIsTransactionModalOpen(false);
+    } catch (err: any) {
+      console.error('InventoryView: Erro ao registrar transação:', err);
+      alert(err?.message || 'Erro ao registrar transação. Verifique o console.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -419,9 +436,14 @@ export default function InventoryView({
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 py-4 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                    disabled={isSaving}
+                    className="flex-1 py-4 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
                   >
-                    <Check size={20} /> Salvar Produto
+                    {isSaving ? (
+                      <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Salvando...</>
+                    ) : (
+                      <><Check size={20} /> Salvar Produto</>
+                    )}
                   </button>
                 </div>
               </form>
@@ -490,9 +512,14 @@ export default function InventoryView({
 
                 <button 
                   type="submit"
-                  className={`w-full py-4 rounded-2xl text-white font-bold shadow-xl transition-all flex items-center justify-center gap-2 ${transactionFormData.type === 'IN' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20'}`}
+                  disabled={isSaving}
+                  className={`w-full py-4 rounded-2xl text-white font-bold shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed ${transactionFormData.type === 'IN' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20'}`}
                 >
-                  <Check size={20} /> Confirmar
+                  {isSaving ? (
+                    <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Processando...</>
+                  ) : (
+                    <><Check size={20} /> Confirmar</>
+                  )}
                 </button>
               </form>
             </motion.div>
