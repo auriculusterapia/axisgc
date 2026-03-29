@@ -1,0 +1,80 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --color-primary: #2B3654;
+  --color-primary-container: #42527D;
+  --color-secondary: #2a6673;
+  --color-secondary-container: #afe9f8;
+  --color-surface: #f8f9f9;
+  --color-surface-container: #edeeee;
+  --color-surface-container-low: #f3f4f4;
+  --color-surface-container-high: #e7e8e8;
+  --color-on-surface: #191c1c;
+  --color-on-surface-variant: #404943;
+  --color-outline: #707973;
+  --color-outline-variant: #bfc9c1;
+}
+
+:root {
+  --font-sans: var(--font-inter);
+  --font-headline: var(--font-manrope);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-headline);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body, main, .h-full, .overflow-y-auto {
+    overflow: visible !important;
+    height: auto !important;
+    position: static !important;
+  }
+  
+  .p-10 {
+    padding: 1rem !important;
+  }
+
+  .bg-surface {
+    background-color: white !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline);
+}

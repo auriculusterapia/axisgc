@@ -1,0 +1,554 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Plus, 
+  Clock, 
+  User, 
+  FileText, 
+  X, 
+  Check,
+  Calendar as CalendarIcon,
+  MoreVertical,
+  Trash2,
+  Edit2
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface Appointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  date: string; // ISO string
+  time: string; // HH:mm
+  duration: number; // minutes
+  type: 'initial' | 'follow-up' | 'emergency';
+  notes: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  price: number;
+  paymentStatus: 'pendente' | 'pago';
+}
+
+interface Patient {
+  id: string;
+  name: string;
+}
+
+interface ConsultationType {
+  id: string;
+  name: string;
+  price: number;
+}
+
+import { User as UserType } from '@/types/auth';
+
+interface CalendarViewProps {
+  forceOpenModal?: boolean;
+  onModalClose?: () => void;
+  user?: UserType | null;
+  appointments: Appointment[];
+  patients: Patient[];
+  onSaveAppointment: (data: any) => Promise<void>;
+  onDeleteAppointment: (id: string) => Promise<void>;
+  onOpenPatientModal?: () => void;
+}
+
+export default function CalendarView({ 
+  forceOpenModal = false, 
+  onModalClose,
+  user,
+  appointments,
+  patients,
+  onSaveAppointment,
+  onDeleteAppointment,
+  onOpenPatientModal
+}: CalendarViewProps) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+  
+  const [consultationTypes, setConsultationTypes] = useState<ConsultationType[]>([
+    { id: 'initial', name: 'Primeira Consulta', price: 250 },
+    { id: 'followup', name: 'Retorno', price: 150 },
+    { id: 'emergency', name: 'Emergência', price: 300 }
+  ]);
+
+  const [isModalOpen, setIsModalOpen] = useState(forceOpenModal);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const canCreate = user?.permissions.includes('calendar:create') || user?.role === 'ADMIN';
+  const canEdit = user?.permissions.includes('calendar:edit') || user?.role === 'ADMIN';
+  const canDelete = user?.permissions.includes('calendar:delete') || user?.role === 'ADMIN';
+
+  const [newAppointment, setNewAppointment] = useState<Partial<Appointment>>({
+    date: new Date().toISOString().split('T')[0],
+    time: '09:00',
+    duration: 45,
+    type: 'follow-up',
+    status: 'scheduled',
+    patientId: '',
+    notes: ''
+  });
+
+  useEffect(() => {
+    if (forceOpenModal) {
+      const timer = setTimeout(() => setIsModalOpen(true), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [forceOpenModal]);
+
+  const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const firstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  const prevDate = () => {
+    if (viewMode === 'month') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    } else {
+      const newDate = new Date(currentDate);
+      newDate.setDate(currentDate.getDate() - 7);
+      setCurrentDate(newDate);
+    }
+  };
+
+  const nextDate = () => {
+    if (viewMode === 'month') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    } else {
+      const newDate = new Date(currentDate);
+      newDate.setDate(currentDate.getDate() + 7);
+      setCurrentDate(newDate);
+    }
+  };
+
+  const getPriceByType = (type: string) => {
+    const found = consultationTypes.find(t => t.id === type || t.name === type);
+    return found ? found.price : 150;
+  };
+
+  const handleSaveAppointment = async () => {
+    if (!newAppointment.patientId) {
+      alert('Por favor, selecione um paciente para o agendamento.');
+      return;
+    }
+    if (!newAppointment.date || !newAppointment.time) {
+      alert('Por favor, preencha a data e o horário da consulta.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const patient = patients.find(p => p.id === newAppointment.patientId);
+      const type = newAppointment.type || 'follow-up';
+      
+      const appointmentData = {
+        ...newAppointment,
+        patientName: patient?.name || 'Paciente Desconhecido',
+        price: newAppointment.price || getPriceByType(type),
+        id: editingAppointment?.id
+      };
+
+      await onSaveAppointment(appointmentData);
+
+      setIsModalOpen(false);
+      setEditingAppointment(null);
+      setNewAppointment({
+        date: new Date().toISOString().split('T')[0],
+        time: '09:00',
+        duration: 45,
+        type: 'follow-up',
+        status: 'scheduled',
+        patientId: '',
+        notes: ''
+      });
+      if (onModalClose) onModalClose();
+    } catch (error) {
+      console.error('Error saving appointment:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAppointment = async (id: string) => {
+    await onDeleteAppointment(id);
+  };
+
+  const monthName = currentDate.toLocaleString('pt-BR', { month: 'long' });
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const renderMonthView = () => {
+    const days = [];
+    const totalDays = daysInMonth(year, month);
+    const startDay = firstDayOfMonth(year, month);
+
+    // Padding for previous month
+    for (let i = 0; i < startDay; i++) {
+      days.push(<div key={`empty-${i}`} className="h-32 border-b border-r border-outline-variant/5 bg-surface-container-low/30"></div>);
+    }
+
+    // Days of the month
+    for (let d = 1; d <= totalDays; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayAppointments = appointments.filter(app => app.date === dateStr);
+      const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+      days.push(
+        <div key={d} className={`h-32 border-b border-r border-outline-variant/5 p-2 transition-colors hover:bg-surface-container-low/50 group relative`}>
+          <div className="flex justify-between items-start">
+            <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-primary text-white' : 'text-on-surface-variant'}`}>
+              {d}
+            </span>
+            {canCreate && (
+              <button 
+                onClick={() => {
+                  setNewAppointment({ ...newAppointment, date: dateStr });
+                  setIsModalOpen(true);
+                }}
+                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-primary/10 text-primary rounded-md transition-all"
+              >
+                <Plus size={14} />
+              </button>
+            )}
+          </div>
+          <div className="mt-1 space-y-1 overflow-y-auto max-h-20 scrollbar-hide">
+            {dayAppointments.map(app => (
+              <div 
+                key={app.id} 
+                onClick={() => {
+                  if (canEdit) {
+                    setEditingAppointment(app);
+                    setNewAppointment(app);
+                    setIsModalOpen(true);
+                  }
+                }}
+                className={`text-[10px] p-1 rounded border-l-2 truncate cursor-pointer transition-all hover:brightness-95 ${
+                  app.type === 'initial' ? 'bg-blue-50 border-blue-500 text-blue-700' :
+                  app.type === 'emergency' ? 'bg-rose-50 border-rose-500 text-rose-700' :
+                  'bg-emerald-50 border-emerald-500 text-emerald-700'
+                }`}
+              >
+                <span className="font-bold">{app.time}</span> {app.patientName}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return days;
+  };
+
+  const renderWeekView = () => {
+    const days = [];
+    const startOfWeek = new Date(currentDate);
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(startOfWeek);
+      day.setDate(startOfWeek.getDate() + i);
+      const dateStr = day.toISOString().split('T')[0];
+      const dayAppointments = appointments.filter(app => app.date === dateStr);
+      const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+      days.push(
+        <div key={i} className={`h-[500px] border-r border-outline-variant/5 p-2 transition-colors hover:bg-surface-container-low/50 group relative`}>
+          <div className="flex flex-col items-center mb-4">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-outline mb-1">
+              {day.toLocaleString('pt-BR', { weekday: 'short' })}
+            </span>
+            <span className={`text-lg font-bold w-10 h-10 flex items-center justify-center rounded-full ${isToday ? 'bg-primary text-white' : 'text-on-surface'}`}>
+              {day.getDate()}
+            </span>
+          </div>
+          
+          <div className="space-y-2 overflow-y-auto h-[400px] scrollbar-hide pr-1">
+            {dayAppointments.sort((a, b) => a.time.localeCompare(b.time)).map(app => (
+              <div 
+                key={app.id} 
+                onClick={() => {
+                  if (canEdit) {
+                    setEditingAppointment(app);
+                    setNewAppointment(app);
+                    setIsModalOpen(true);
+                  }
+                }}
+                className={`p-3 rounded-xl border-l-4 shadow-sm cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${
+                  app.type === 'initial' ? 'bg-blue-50 border-blue-500 text-blue-700' :
+                  app.type === 'emergency' ? 'bg-rose-50 border-rose-500 text-rose-700' :
+                  'bg-emerald-50 border-emerald-500 text-emerald-700'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock size={12} />
+                  <span className="text-[10px] font-bold">{app.time}</span>
+                </div>
+                <p className="text-xs font-bold truncate">{app.patientName}</p>
+                <p className="text-[10px] opacity-70 truncate">{app.duration} min</p>
+              </div>
+            ))}
+            {canCreate && (
+              <button 
+                onClick={() => {
+                  setNewAppointment({ ...newAppointment, date: dateStr });
+                  setIsModalOpen(true);
+                }}
+                className="w-full py-3 border-2 border-dashed border-outline-variant/20 rounded-xl text-outline hover:text-primary hover:border-primary/30 transition-all flex items-center justify-center gap-2"
+              >
+                <Plus size={16} />
+                <span className="text-[10px] font-bold uppercase">Novo</span>
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return days;
+  };
+
+  return (
+    <div className="p-10 h-full flex flex-col space-y-8 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-4xl font-bold font-headline text-on-surface capitalize">
+            {viewMode === 'month' ? `${monthName} ${year}` : `Semana de ${currentDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}`}
+          </h2>
+          <p className="text-on-surface-variant text-lg mt-2 font-medium">Gerencie seus atendimentos e horários.</p>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* View Mode Toggle */}
+          <div className="flex bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10">
+            <button 
+              onClick={() => setViewMode('month')}
+              className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${viewMode === 'month' ? 'bg-white shadow-sm text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+            >
+              Mês
+            </button>
+            <button 
+              onClick={() => setViewMode('week')}
+              className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${viewMode === 'week' ? 'bg-white shadow-sm text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+            >
+              Semana
+            </button>
+          </div>
+
+          <div className="flex bg-white rounded-2xl shadow-sm border border-outline-variant/10 p-1">
+            <button onClick={prevDate} className="p-2 hover:bg-surface-container-low rounded-xl transition-all text-on-surface-variant">
+              <ChevronLeft size={20} />
+            </button>
+            <button onClick={() => setCurrentDate(new Date())} className="px-4 py-2 text-xs font-bold text-on-surface hover:bg-surface-container-low rounded-xl transition-all">
+              Hoje
+            </button>
+            <button onClick={nextDate} className="p-2 hover:bg-surface-container-low rounded-xl transition-all text-on-surface-variant">
+              <ChevronRight size={20} />
+            </button>
+          </div>
+          {canCreate && (
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="bg-primary text-white px-6 py-3 rounded-2xl font-bold text-sm flex items-center gap-2 hover:brightness-110 transition-all shadow-xl shadow-primary/20"
+            >
+              <Plus size={18} /> Novo Atendimento
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Calendar Grid */}
+      <div className="flex-1 bg-white rounded-[2.5rem] shadow-sm border border-outline-variant/10 overflow-hidden flex flex-col">
+        {viewMode === 'month' ? (
+          <>
+            {/* Weekdays */}
+            <div className="grid grid-cols-7 border-b border-outline-variant/10 bg-surface-container-low/50">
+              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+                <div key={day} className="py-4 text-center text-[10px] font-bold uppercase tracking-widest text-outline">
+                  {day}
+                </div>
+              ))}
+            </div>
+            {/* Days */}
+            <div className="flex-1 grid grid-cols-7 overflow-y-auto">
+              {renderMonthView()}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 grid grid-cols-7 overflow-y-auto">
+            {renderWeekView()}
+          </div>
+        )}
+      </div>
+
+      {/* Appointment Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setIsModalOpen(false);
+                setEditingAppointment(null);
+                if (onModalClose) onModalClose();
+              }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low/30">
+                <div>
+                  <h3 className="text-2xl font-bold font-headline text-on-surface">
+                    {editingAppointment ? 'Editar Atendimento' : 'Novo Atendimento'}
+                  </h3>
+                  <p className="text-sm text-on-surface-variant font-medium">Preencha os detalhes da consulta.</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingAppointment(null);
+                    if (onModalClose) onModalClose();
+                  }} 
+                  className="p-2 hover:bg-surface-container-low rounded-full transition-all"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+                {/* Patient Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-outline uppercase tracking-widest flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2"><User size={14} /> Paciente</span>
+                    {onOpenPatientModal && (
+                      <button 
+                        onClick={() => {
+                          setIsModalOpen(false);
+                          if (onModalClose) onModalClose();
+                          onOpenPatientModal();
+                        }}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        + Novo Paciente
+                      </button>
+                    )}
+                  </label>
+                  <select 
+                    value={newAppointment.patientId || ''}
+                    onChange={e => setNewAppointment({...newAppointment, patientId: e.target.value})}
+                    className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none"
+                  >
+                    <option value="">Selecione um paciente...</option>
+                    {patients.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest flex items-center gap-2">
+                      <CalendarIcon size={14} /> Data
+                    </label>
+                    <input 
+                      type="date" 
+                      value={newAppointment.date}
+                      onChange={e => setNewAppointment({...newAppointment, date: e.target.value})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest flex items-center gap-2">
+                      <Clock size={14} /> Horário
+                    </label>
+                    <input 
+                      type="time" 
+                      value={newAppointment.time}
+                      onChange={e => setNewAppointment({...newAppointment, time: e.target.value})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Duração (min)</label>
+                    <select 
+                      value={newAppointment.duration}
+                      onChange={e => setNewAppointment({...newAppointment, duration: parseInt(e.target.value)})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none"
+                    >
+                      <option value={15}>15 min</option>
+                      <option value={30}>30 min</option>
+                      <option value={45}>45 min</option>
+                      <option value={60}>60 min</option>
+                      <option value={90}>90 min</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Tipo de Consulta</label>
+                    <select 
+                      value={newAppointment.type}
+                      onChange={e => setNewAppointment({...newAppointment, type: e.target.value as any})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none"
+                    >
+                      {consultationTypes.map(type => (
+                        <option key={type.id} value={type.id}>{type.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-outline uppercase tracking-widest flex items-center gap-2">
+                    <FileText size={14} /> Observações
+                  </label>
+                  <textarea 
+                    value={newAppointment.notes}
+                    onChange={e => setNewAppointment({...newAppointment, notes: e.target.value})}
+                    placeholder="Alguma observação importante para este atendimento?"
+                    className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium min-h-[100px] resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  {editingAppointment && canDelete && (
+                    <button 
+                      onClick={() => {
+                        handleDeleteAppointment(editingAppointment.id);
+                        setIsModalOpen(false);
+                        setEditingAppointment(null);
+                        if (onModalClose) onModalClose();
+                      }}
+                      className="flex-1 py-4 rounded-2xl border border-rose-200 text-rose-500 font-bold hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Trash2 size={20} /> Excluir
+                    </button>
+                  )}
+                  <button 
+                    onClick={handleSaveAppointment}
+                    disabled={isSaving}
+                    className="flex-[2] py-4 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? (
+                      <span className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        Salvando...
+                      </span>
+                    ) : (
+                      <><Check size={20} /> {editingAppointment ? 'Salvar Alterações' : 'Confirmar Agendamento'}</>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

@@ -1,0 +1,1022 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import Sidebar from '@/components/Sidebar';
+import TopBar from '@/components/TopBar';
+import DashboardView from '@/components/DashboardView';
+import PatientsView from '@/components/PatientsView';
+import PatientDetailView from '@/components/PatientDetailView';
+import CalendarView from '@/components/CalendarView';
+import AuricularMapView from '@/components/AuricularMapView';
+import FinancialView from '@/components/FinancialView';
+import ProtocolsView from '@/components/ProtocolsView';
+import SettingsView from '@/components/SettingsView';
+import UsersManagementView from '@/components/UsersManagementView';
+import InventoryView from '@/components/InventoryView';
+import LowStockAlertModal from '@/components/LowStockAlertModal';
+import AuditLogsView from '@/components/AuditLogsView';
+import EvaluationsView from '@/components/EvaluationsView';
+import LoginView from '@/components/LoginView';
+import BottomNav from '@/components/BottomNav';
+import { AnimatePresence, motion } from 'motion/react';
+import PatientModal from '@/components/PatientModal';
+import ConsultationModal from '@/components/ConsultationModal';
+import ConfirmationModal from '@/components/ConfirmationModal';
+import { User, ROLE_PERMISSIONS, ADMIN_PERMISSIONS } from '@/types/auth';
+import { Shield } from 'lucide-react';
+import { logAction } from '@/lib/auditLogService';
+
+const INITIAL_PATIENTS = [
+  {
+    id: '1',
+    name: 'Isabella Chen',
+    age: 32,
+    gender: 'Feminino',
+    phone: '(11) 98877-6655',
+    email: 'isabella.chen@email.com',
+    address: 'Rua das Flores, 123 - São Paulo, SP',
+    maritalStatus: 'Solteira',
+    profession: 'Designer',
+    status: 'Ativo',
+    lastVisit: '2024-03-12',
+    avatar: 'https://picsum.photos/seed/isabella/200/200'
+  },
+  {
+    id: '2',
+    name: 'Ricardo Santos',
+    age: 45,
+    gender: 'Masculino',
+    phone: '(11) 97766-5544',
+    email: 'ricardo.santos@email.com',
+    address: 'Av. Paulista, 1500 - São Paulo, SP',
+    maritalStatus: 'Casado',
+    profession: 'Engenheiro',
+    status: 'Ativo',
+    lastVisit: '2024-03-10',
+    avatar: 'https://picsum.photos/seed/ricardo/200/200'
+  },
+  {
+    id: '3',
+    name: 'Ana Oliveira',
+    age: 28,
+    gender: 'Feminino',
+    phone: '(11) 96655-4433',
+    email: 'ana.oliveira@email.com',
+    address: 'Rua Augusta, 450 - São Paulo, SP',
+    maritalStatus: 'Divorciada',
+    profession: 'Advogada',
+    status: 'Inativo',
+    lastVisit: '2024-02-15',
+    avatar: 'https://picsum.photos/seed/ana/200/200'
+  }
+];
+
+import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
+
+export default function Home() {
+  const { user, signOut, loading: authLoading } = useAuth();
+  const [activeView, setActiveView] = useState('dashboard');
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>(undefined);
+  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [consultations, setConsultations] = useState<any[]>([]);
+  const [evaluations, setEvaluations] = useState<any[]>([]);
+  const [protocols, setProtocols] = useState<any[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+  const [isConsultationModalOpen, setIsConsultationModalOpen] = useState(false);
+  const [activeConsultation, setActiveConsultation] = useState<any>(null);
+  const [editingConsultation, setEditingConsultation] = useState<any>(null);
+  const [consultationToDelete, setConsultationToDelete] = useState<string | null>(null);
+  const [editingPatient, setEditingPatient] = useState<any>(null);
+  const [patientToDelete, setPatientToDelete] = useState<any>(null);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  
+  // Inventory Alert
+  const [isLowStockAlertOpen, setIsLowStockAlertOpen] = useState(false);
+  const [hasDismissedLowStockAlert, setHasDismissedLowStockAlert] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      fetchData();
+    } else {
+      setIsDataLoading(false);
+    }
+  }, [user]);
+
+  const fetchData = async () => {
+    if (!supabase) {
+      setIsDataLoading(false);
+      return;
+    }
+    setIsDataLoading(true);
+    try {
+      const [
+        { data: patientsData },
+        { data: appointmentsData },
+        { data: consultationsData },
+        { data: evaluationsData },
+        { data: protocolsData },
+        { data: inventoryData }
+      ] = await Promise.all([
+        supabase.from('patients').select('*').order('name'),
+        supabase.from('appointments').select('*').order('date', { ascending: false }),
+        supabase.from('consultations').select('*').order('date', { ascending: false }),
+        supabase.from('evaluations').select('*').order('date', { ascending: false }),
+        supabase.from('protocols').select('*').order('name'),
+        supabase.from('inventory_items').select('*').order('name')
+      ]);
+
+      if (patientsData) {
+        setPatients(patientsData.map(p => ({
+          ...p,
+          maritalStatus: p.marital_status || 'Solteiro(a)',
+          avatar: p.avatar_url || '',
+          lastVisit: p.last_visit || 'N/A'
+        })));
+      }
+      if (appointmentsData) {
+        setAppointments(appointmentsData.map(a => ({
+          ...a,
+          patientId: a.patient_id,
+          patientName: a.patient_name,
+          paymentStatus: a.payment_status
+        })));
+      }
+      if (consultationsData) {
+        setConsultations(consultationsData.map(c => ({
+          ...c,
+          patientId: c.patient_id,
+          startTime: (c as any).start_time,
+          endTime: (c as any).end_time
+        })));
+      }
+      if (evaluationsData) {
+        setEvaluations(evaluationsData.map(e => ({
+          ...(e.data as any),
+          id: e.id,
+          patientId: e.patient_id,
+          date: e.date
+        })));
+      }
+      if (protocolsData) {
+        setProtocols(protocolsData.map(p => ({
+          ...p,
+          title: p.name,
+          points: p.points || [],
+          duration: '20 min', // Default as it's not in schema
+          usage: 0,
+          rating: 5.0,
+          color: 'bg-emerald-500'
+        })));
+      }
+      if (inventoryData) {
+        const mappedInventory = inventoryData.map(i => ({
+          ...i,
+          color: COLORS_ARRAY[Math.floor(Math.random() * COLORS_ARRAY.length)]
+        }));
+        setInventoryItems(mappedInventory);
+        
+        // Show alert if there are low stock items
+        const lowStock = mappedInventory.filter(item => item.quantity <= item.min_quantity);
+        if (lowStock.length > 0 && !hasDismissedLowStockAlert) {
+          setIsLowStockAlertOpen(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setIsDataLoading(false);
+    }
+  };
+
+  const handleLogin = () => {
+    // Auth is handled by AuthProvider
+    setActiveView('dashboard');
+  };
+
+  const handleLogout = async () => {
+    console.log('handleLogout called');
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Error during logout:', error);
+    } finally {
+      // Forçar o redirecionamento/recarga para garantir limpeza total do estado
+      window.location.href = '/';
+    }
+  };
+
+  const handleViewChange = (view: string) => {
+    if (view !== 'evaluations' && view !== 'patient-detail') {
+      setSelectedPatientId(undefined);
+      setSelectedPatient(null);
+    }
+    setActiveView(view);
+  };
+
+  const handleOpenEvaluations = (patientId: string) => {
+    setSelectedPatientId(patientId);
+    setActiveView('evaluations');
+  };
+
+  const handleOpenPatientDetail = (patient: any) => {
+    setSelectedPatient(patient);
+    setActiveView('patient-detail');
+  };
+
+  const handleSavePatient = useCallback(async (data: any) => {
+    console.log('app/page.tsx: handleSavePatient called with data:', data);
+    
+    if (!supabase) {
+      console.error('app/page.tsx: Supabase client is null');
+      throw new Error('Cliente Supabase não inicializado. Verifique sua conexão.');
+    }
+
+    if (!user) {
+      console.error('app/page.tsx: No authenticated user found');
+      throw new Error('Usuário não autenticado.');
+    }
+
+    try {
+      // Validate avatar size
+      if (data.avatar && data.avatar.startsWith('data:')) {
+        const sizeInBytes = Math.round((data.avatar.length * 3) / 4);
+        console.log(`app/page.tsx: Avatar size: ~${(sizeInBytes / 1024).toFixed(2)} KB`);
+        if (sizeInBytes > 500 * 1024) {
+          console.warn('app/page.tsx: Avatar is quite large (>500KB). This might cause timeouts.');
+        }
+      }
+
+      // Map camelCase to snake_case for Supabase
+      const patientData = {
+        name: data.name,
+        age: parseInt(data.age) || 0,
+        gender: data.gender,
+        phone: data.phone,
+        email: data.email,
+        address: data.address,
+        marital_status: data.maritalStatus,
+        profession: data.profession,
+        status: data.status,
+        avatar_url: null // Retirada permanente das imagens para ganho de performance
+      };
+
+      // Safety timeout promise (15 seconds)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Tempo limite de conexão excedido (15s). Verifique sua rede.')), 15000);
+      });
+
+      if (editingPatient) {
+        console.log('app/page.tsx: Iniciando atualização do paciente:', editingPatient.id);
+        
+        console.dir(patientData);
+        
+        // Race the database update against the timeout
+        const updateCall = supabase
+          .from('patients')
+          .update({
+            ...patientData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingPatient.id);
+
+        const { error } = await Promise.race([updateCall, timeoutPromise]) as any;
+        
+        if (error) {
+          console.error('app/page.tsx: Erro específico do Supabase:', error.message, error.code);
+          throw error;
+        }
+
+        // Since we removed .select(), we update local state with the same data we sent
+        const mappedPatient = {
+          ...editingPatient,
+          ...data,
+          age: parseInt(data.age) || 0,
+          maritalStatus: data.maritalStatus,
+          avatar: '',
+          lastVisit: editingPatient.lastVisit || 'N/A'
+        };
+
+        setPatients(prev => prev.map(p => p.id === editingPatient.id ? mappedPatient : p));
+        if (selectedPatient?.id === editingPatient.id) {
+          setSelectedPatient(mappedPatient);
+        }
+        console.log('app/page.tsx: Atualização concluída com sucesso');
+      } else {
+        console.log('app/page.tsx: Iniciando inserção de novo paciente');
+        
+        // Race the database insert against the timeout
+        const insertCall = supabase
+          .from('patients')
+          .insert([{
+            ...patientData,
+            created_by: user.id
+          }])
+          .select();
+
+        const { data: insertedRows, error } = await Promise.race([insertCall, timeoutPromise]) as any;
+        
+        if (error) {
+          console.error('app/page.tsx: Erro no insert do Supabase:', error);
+          throw error;
+        }
+
+        if (!insertedRows || insertedRows.length === 0) {
+          console.error('app/page.tsx: Erro ao inserir paciente.');
+          throw new Error('Erro ao inserir paciente.');
+        }
+
+        const newPatient = insertedRows[0];
+        const mappedPatient = {
+          ...newPatient,
+          maritalStatus: newPatient.marital_status || 'Solteiro(a)',
+          avatar: newPatient.avatar_url || '',
+          lastVisit: newPatient.last_visit || 'N/A'
+        };
+
+        setPatients(prev => [mappedPatient, ...prev]);
+        console.log('app/page.tsx: Insert successful');
+      }
+      
+      setIsPatientModalOpen(false);
+      setEditingPatient(null);
+      
+    } catch (error: any) {
+      console.error('app/page.tsx: Error in handleSavePatient:', error);
+      throw error;
+    }
+  }, [user, editingPatient, selectedPatient, setPatients, setSelectedPatient, setIsPatientModalOpen, setEditingPatient]);
+
+  if (authLoading) return (
+    <div className="flex items-center justify-center min-h-screen bg-surface">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-on-surface-variant font-medium">Carregando...</p>
+      </div>
+    </div>
+  );
+
+  if (!user) {
+    return <LoginView onLogin={handleLogin} />;
+  }
+
+  const handleNewAppointment = () => {
+    setActiveView('calendar');
+    setIsCalendarModalOpen(true);
+  };
+
+  const handleDeletePatient = async () => {
+    if (!supabase || !patientToDelete) return;
+    try {
+      const { error } = await supabase.from('patients').delete().eq('id', patientToDelete.id);
+      if (error) throw error;
+      setPatients(prev => prev.filter(p => p.id !== patientToDelete.id));
+      await logAction({ action: 'DELETE', entityType: 'PATIENTS', details: { summary: `Paciente excluído: ${patientToDelete.name}`, id: patientToDelete.id } });
+      console.log('app/page.tsx: Paciente excluído com sucesso');
+    } catch (error) {
+      console.error('Error deleting patient:', error);
+      alert('Não foi possível excluir o paciente. Verifique se há histórico clínico travado ou permissões de administrador.');
+    } finally {
+      setPatientToDelete(null);
+    }
+  };
+
+  const handleSaveAppointment = async (data: any) => {
+    if (!supabase) return;
+
+    // Safety timeout promise (15 seconds)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Tempo limite de conexão excedido (15s). Verifique sua rede.')), 15000);
+    });
+
+    try {
+      console.log('app/page.tsx: Iniciando agendamento para:', data.patientName);
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado.');
+      }
+
+      const appointmentData = {
+        patient_id: data.patientId,
+        patient_name: data.patientName,
+        date: data.date,
+        time: data.time,
+        duration: data.duration,
+        type: data.type,
+        status: data.status,
+        payment_status: data.paymentStatus || 'pendente',
+        price: data.price,
+        notes: data.notes,
+        updated_at: new Date().toISOString()
+      };
+
+      if (data.id) {
+        const updateCall = supabase
+          .from('appointments')
+          .update(appointmentData)
+          .eq('id', data.id);
+        
+        const { error } = await Promise.race([updateCall, timeoutPromise]) as any;
+        if (error) {
+          console.error('app/page.tsx: Erro no update do agendamento:', error.message);
+          throw error;
+        }
+        setAppointments(prev => prev.map(a => a.id === data.id ? { ...a, ...data } : a));
+      } else {
+        const insertCall = supabase
+          .from('appointments')
+          .insert([{ ...appointmentData, created_by: user?.id }])
+          .select()
+          .single();
+          
+        const { data: newAppointment, error } = await Promise.race([insertCall, timeoutPromise]) as any;
+        if (error) {
+          console.error('app/page.tsx: Erro no insert do agendamento:', error.message);
+          throw error;
+        }
+        if (newAppointment) {
+          setAppointments(prev => [newAppointment, ...prev]);
+          await logAction({ action: 'CREATE', entityType: 'FINANCIAL', details: { summary: `Novo Lançamento/Agendamento: ${data.patientName} (Status: ${data.paymentStatus})`, id: newAppointment.id } });
+        }
+      }
+      
+      if (data.id) {
+        await logAction({ action: 'UPDATE', entityType: 'FINANCIAL', details: { summary: `Lançamento/Agendamento Atualizado: ${data.patientName} (Status: ${data.paymentStatus})`, id: data.id } });
+      }
+      
+      console.log('app/page.tsx: Agendamento salvo com sucesso');
+    } catch (error: any) {
+      console.error('Error saving appointment:', error);
+      alert(error.message || 'Erro ao salvar agendamento. Verifique sua conexão.');
+      throw error; // Re-throw to be caught by CalendarView
+    }
+  };
+
+  const handleDeleteAppointment = async (id: string) => {
+    if (!supabase) return;
+    try {
+      const appToDel = appointments.find(a => a.id === id);
+      const { error } = await supabase.from('appointments').delete().eq('id', id);
+      if (error) throw error;
+      setAppointments(prev => prev.filter(a => a.id !== id));
+      if (appToDel) {
+        await logAction({ action: 'DELETE', entityType: 'APPOINTMENTS', details: { summary: `Consulta/Transação excluída: ${appToDel.patientName}`, id } });
+      }
+    } catch (error) {
+      console.error('Error deleting appointment:', error);
+    }
+  };
+
+  const handleSaveEvaluation = async (data: any) => {
+    if (!supabase) return;
+
+    // Safety timeout promise (15 seconds)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Tempo limite de conexão excedido (15s). Verifique sua rede.')), 15000);
+    });
+
+    try {
+      console.log('app/page.tsx: Iniciando salvamento de avaliação para paciente ID:', data.patientId);
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado.');
+      }
+
+      const evaluationData = {
+        patient_id: data.patientId,
+        date: data.date || new Date().toISOString().split('T')[0],
+        data: data, // Store full object in JSONB column
+        updated_at: new Date().toISOString()
+      };
+
+      if (data.id && data.id.startsWith('eval-') === false) { // Check if it's a real UUID or temp ID
+        const updateCall = supabase
+          .from('evaluations')
+          .update(evaluationData)
+          .eq('id', data.id);
+        
+        const { error } = await Promise.race([updateCall, timeoutPromise]) as any;
+        if (error) {
+          console.error('app/page.tsx: Erro no update da avaliação:', error.message);
+          throw error;
+        }
+        setEvaluations(prev => prev.map(e => e.id === data.id ? { ...e, ...data } : e));
+      } else {
+        const insertCall = supabase
+          .from('evaluations')
+          .insert([{ ...evaluationData, created_by: user?.id }])
+          .select()
+          .single();
+          
+        const { data: newEvaluation, error } = await Promise.race([insertCall, timeoutPromise]) as any;
+        if (error) {
+          console.error('app/page.tsx: Erro no insert da avaliação:', error.message);
+          throw error;
+        }
+        if (newEvaluation) {
+          // Map back for local state
+          const mappedEval = {
+            ...newEvaluation.data,
+            id: newEvaluation.id,
+            patientId: newEvaluation.patient_id,
+            date: newEvaluation.date
+          };
+          setEvaluations(prev => [mappedEval, ...prev]);
+        }
+      }
+      console.log('app/page.tsx: Avaliação salva com sucesso');
+    } catch (error: any) {
+      console.error('Error saving evaluation:', error);
+      alert(error.message || 'Erro ao finalizar avaliação. Verifique sua conexão.');
+      throw error; // Re-throw to be caught by EvaluationsView
+    }
+  };
+
+  const handleDeleteEvaluation = async (id: string) => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase.from('evaluations').delete().eq('id', id);
+      if (error) throw error;
+      setEvaluations(prev => prev.filter(e => e.id !== id));
+      await logAction({ action: 'DELETE', entityType: 'EVALUATIONS', details: { id } });
+    } catch (error) {
+      console.error('Error deleting evaluation:', error);
+    }
+  };
+
+  const handleSaveProtocol = async (data: any) => {
+    if (!supabase) return;
+    try {
+      const protocolData = {
+        name: data.title,
+        description: data.description,
+        points: data.points,
+        category: data.category,
+        updated_at: new Date().toISOString()
+      };
+
+      if (data.id && data.id.length > 10) { // Check if it's a real UUID
+        const { error } = await supabase
+          .from('protocols')
+          .update(protocolData)
+          .eq('id', data.id);
+        if (error) throw error;
+        setProtocols(prev => prev.map(p => p.id === data.id ? { ...p, ...data } : p));
+      } else {
+        const { data: newProtocol, error } = await supabase
+          .from('protocols')
+          .insert([{ ...protocolData, created_by: user?.id }])
+          .select()
+          .single();
+        if (error) throw error;
+        if (newProtocol) {
+          setProtocols(prev => [{
+            ...newProtocol,
+            title: newProtocol.name,
+            points: newProtocol.points || [],
+            duration: '20 min',
+            usage: 0,
+            rating: 5.0,
+            color: 'bg-emerald-500'
+          }, ...prev]);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving protocol:', error);
+    }
+  };
+
+  const handleDeleteProtocol = async (id: string) => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase.from('protocols').delete().eq('id', id);
+      if (error) throw error;
+      setProtocols(prev => prev.filter(p => p.id !== id));
+      await logAction({ action: 'DELETE', entityType: 'SYSTEM', details: { target: 'Protocolo', id } });
+    } catch (error) {
+      console.error('Error deleting protocol:', error);
+    }
+  };
+
+  const COLORS_ARRAY = ['bg-emerald-500', 'bg-indigo-500', 'bg-blue-500', 'bg-rose-500', 'bg-amber-500', 'bg-purple-500'];
+
+  const handleSaveInventoryItem = async (data: any) => {
+    if (!supabase) return;
+    try {
+      if (!user) throw new Error('User not authenticated');
+
+      const itemData = {
+        name: data.name,
+        description: data.description,
+        quantity: data.quantity,
+        min_quantity: data.min_quantity,
+        unit: data.unit,
+        category: data.category,
+        updated_at: new Date().toISOString()
+      };
+
+      if (data.id) {
+        // Prevent editing quantity directly if handled by transactions, but fallback available
+        const { error } = await supabase.from('inventory_items').update(itemData).eq('id', data.id);
+        if (error) throw error;
+        setInventoryItems(prev => prev.map(i => i.id === data.id ? { ...i, ...data } : i));
+      } else {
+        const { data: newItem, error } = await supabase
+          .from('inventory_items')
+          .insert([{ ...itemData, created_by: user.id }])
+          .select()
+          .single();
+        if (error) throw error;
+        if (newItem) {
+          setInventoryItems(prev => [{ ...newItem, color: COLORS_ARRAY[Math.floor(Math.random() * COLORS_ARRAY.length)] }, ...prev]);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving inventory item:', error);
+      alert('Erro ao salvar produto.');
+    }
+  };
+
+  const handleDeleteInventoryItem = async (id: string) => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase.from('inventory_items').delete().eq('id', id);
+      if (error) throw error;
+      setInventoryItems(prev => prev.filter(i => i.id !== id));
+      await logAction({ action: 'DELETE', entityType: 'INVENTORY', details: { summary: 'Item de estoque excluído', id } });
+    } catch (error) {
+      console.error('Error deleting inventory item:', error);
+      alert('Erro ao excluir produto.');
+    }
+  };
+
+  const handleAddInventoryTransaction = async (data: any) => {
+    if (!supabase || !user) return;
+    try {
+      const { error: transactionError } = await supabase.from('inventory_transactions').insert([{
+        item_id: data.item_id,
+        type: data.type,
+        quantity: data.quantity,
+        notes: data.notes || null,
+        created_by: user.id
+      }]);
+      if (transactionError) throw transactionError;
+
+      // Update local item quantity inline
+      setInventoryItems(prev => prev.map(item => {
+        if (item.id === data.item_id) {
+          const change = data.type === 'IN' ? data.quantity : -data.quantity;
+          const newQty = Math.max(0, item.quantity + change);
+          
+          // Background update to DB
+          supabase!.from('inventory_items').update({ quantity: newQty, updated_at: new Date().toISOString() }).eq('id', item.id).then();
+          
+          return { ...item, quantity: newQty };
+        }
+        return item;
+      }));
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      alert('Erro ao registrar transação.');
+    }
+  };
+
+  const renderView = () => {
+    const allowedViews = user.permissions || [];
+    const hasAccess = user.role === 'ADMIN' || allowedViews.some(p => p === activeView || p.startsWith(`${activeView}:`));
+    
+    if (!hasAccess && activeView !== 'patient-detail') {
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-10 text-center">
+          <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mb-6">
+            <Shield size={40} />
+          </div>
+          <h3 className="text-2xl font-bold text-on-surface">Acesso Restrito</h3>
+          <p className="text-on-surface-variant mt-2 max-w-md">
+            Você não tem permissão para acessar esta área ({activeView}). 
+            Entre em contato com o administrador se precisar de acesso.
+          </p>
+          <button 
+            onClick={() => setActiveView('dashboard')}
+            className="mt-8 px-8 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20"
+          >
+            Voltar ao Painel
+          </button>
+        </div>
+      );
+    }
+
+    switch (activeView) {
+      case 'dashboard':
+        return (
+          <DashboardView 
+            onNewAppointment={handleNewAppointment} 
+            onOpenAgenda={() => setActiveView('calendar')}
+            appointments={appointments}
+            patients={patients}
+            evaluations={evaluations}
+            onStartConsultation={(patientId) => {
+              const patient = patients.find(p => p.id === patientId);
+              if (patient) {
+                setSelectedPatient(patient);
+                setEditingConsultation(null);
+                setIsConsultationModalOpen(true);
+              }
+            }}
+            onViewPatientHistory={(patientId) => {
+              const patient = patients.find(p => p.id === patientId);
+              if (patient) {
+                setSelectedPatient(patient);
+                setActiveView('patient-detail');
+              }
+            }}
+            user={user}
+          />
+        );
+      case 'patients':
+        return <PatientsView 
+          patients={patients}
+          setPatients={setPatients}
+          onNewAppointment={handleNewAppointment} 
+          onOpenEvaluations={handleOpenEvaluations} 
+          onOpenDetail={handleOpenPatientDetail}
+          onOpenPatientModal={(patient) => {
+            setEditingPatient(patient || null);
+            setIsPatientModalOpen(true);
+          }}
+          onDeletePatient={async (id) => {
+            const patient = patients.find(p => p.id === id);
+            if (patient) setPatientToDelete(patient);
+          }}
+          user={user}
+        />;
+      case 'patient-detail':
+        return (
+          <PatientDetailView 
+            patient={selectedPatient} 
+            consultations={consultations.filter(c => c.patientId === selectedPatient?.id)}
+            evaluations={evaluations.filter(e => e.patientId === selectedPatient?.id)}
+            onBack={() => setActiveView('patients')}
+            onEditPersonal={() => {
+              setEditingPatient(selectedPatient);
+              setIsPatientModalOpen(true);
+            }}
+            onStartConsultation={() => {
+              setEditingConsultation(null);
+              setIsConsultationModalOpen(true);
+            }}
+            onEditConsultation={(consultation) => {
+              setEditingConsultation(consultation);
+              setIsConsultationModalOpen(true);
+            }}
+            onDeleteConsultation={(consultationId) => {
+              setConsultationToDelete(consultationId);
+            }}
+            user={user}
+          />
+        );
+      case 'evaluations':
+        return (
+          <EvaluationsView 
+            key={selectedPatientId || 'all'} 
+            preSelectedPatientId={selectedPatientId} 
+            evaluations={evaluations}
+            patients={patients}
+            onSaveEvaluation={handleSaveEvaluation}
+            onDeleteEvaluation={handleDeleteEvaluation}
+            user={user}
+          />
+        );
+      case 'calendar':
+        return (
+          <CalendarView 
+            forceOpenModal={isCalendarModalOpen} 
+            onModalClose={() => setIsCalendarModalOpen(false)} 
+            user={user}
+            appointments={appointments}
+            patients={patients}
+            onSaveAppointment={handleSaveAppointment}
+            onDeleteAppointment={handleDeleteAppointment}
+            onOpenPatientModal={() => {
+              setEditingPatient(null);
+              setIsPatientModalOpen(true);
+            }}
+          />
+        );
+      case 'auricular':
+        return <AuricularMapView user={user} />;
+      case 'protocols':
+        return (
+          <ProtocolsView 
+            user={user} 
+            protocols={protocols}
+            onSaveProtocol={handleSaveProtocol}
+            onDeleteProtocol={handleDeleteProtocol}
+          />
+        );
+      case 'inventory':
+        return (
+          <InventoryView
+            user={user}
+            items={inventoryItems}
+            onSaveItem={handleSaveInventoryItem}
+            onDeleteItem={handleDeleteInventoryItem}
+            onAddTransaction={handleAddInventoryTransaction}
+          />
+        );
+      case 'financial':
+        return (
+          <FinancialView 
+            user={user} 
+            appointments={appointments} 
+            onConfirmPayment={async (id) => {
+              const app = appointments.find(a => a.id === id);
+              if (app) {
+                await handleSaveAppointment({ ...app, paymentStatus: 'pago' });
+              }
+            }}
+            onDeleteTransaction={handleDeleteAppointment}
+          />
+        );
+      case 'users':
+        return <UsersManagementView user={user} />;
+      case 'settings':
+        return <SettingsView user={user} onLogout={handleLogout} />;
+      case 'audit_logs':
+        return <AuditLogsView user={user} />;
+      default:
+        return (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-on-surface-variant font-medium">Esta visualização ({activeView}) está em desenvolvimento.</p>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="flex min-h-[100dvh] bg-surface pb-16 md:pb-0">
+      <div className="no-print hidden md:block">
+        <Sidebar activeView={activeView} setActiveView={handleViewChange} onNewAppointment={handleNewAppointment} onLogout={signOut} user={user} />
+      </div>
+      
+      <main className="flex-1 flex flex-col h-screen overflow-hidden print:h-auto print:overflow-visible">
+        <div className="no-print">
+          <TopBar user={user} onLogout={handleLogout} />
+        </div>
+        
+        <div className="flex-1 overflow-hidden relative print:overflow-visible print:h-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeView}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.02 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="h-full overflow-y-auto"
+            >
+              {renderView()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+        <BottomNav activeView={activeView} setActiveView={handleViewChange} user={user!} />
+      </main>
+
+      <LowStockAlertModal 
+        isOpen={isLowStockAlertOpen}
+        onClose={() => {
+          setIsLowStockAlertOpen(false);
+          setHasDismissedLowStockAlert(true);
+        }}
+        onNavigateToInventory={() => {
+          setActiveView('inventory');
+          setHasDismissedLowStockAlert(true);
+        }}
+        lowStockItems={inventoryItems.filter(item => item.quantity <= item.min_quantity)}
+      />
+
+      <PatientModal 
+        key={`patient-modal-${editingPatient?.id || (isPatientModalOpen ? 'new' : 'closed')}`}
+        isOpen={isPatientModalOpen}
+        onClose={() => setIsPatientModalOpen(false)}
+        onSave={handleSavePatient}
+        editingPatient={editingPatient}
+      />
+      <ConsultationModal 
+        key={`consultation-modal-${selectedPatient?.id || 'new'}-${editingConsultation?.id || 'new'}`}
+        isOpen={isConsultationModalOpen}
+        onClose={() => {
+          setIsConsultationModalOpen(false);
+          setEditingConsultation(null);
+        }}
+        onSave={async (data) => {
+          if (!supabase) return;
+          try {
+            // Map to consultations table schema
+            const consultationData = {
+              patient_id: data.patientId,
+              date: new Date(data.startTime).toISOString().split('T')[0],
+              start_time: data.startTime,
+              end_time: data.endTime,
+              notes: data.notes,
+              main_complaint: data.type,
+              updated_at: new Date().toISOString()
+            };
+
+            if (editingConsultation) {
+              const { error } = await supabase
+                .from('consultations')
+                .update(consultationData)
+                .eq('id', editingConsultation.id);
+              
+              if (error) throw error;
+              setConsultations(prev => prev.map(c => c.id === editingConsultation.id ? { 
+                ...c, 
+                ...data,
+                startTime: data.startTime,
+                endTime: data.endTime
+              } : c));
+            } else {
+              const { data: newConsultation, error } = await supabase
+                .from('consultations')
+                .insert([{
+                  ...consultationData,
+                  created_by: user?.id
+                }])
+                .select()
+                .single();
+              
+              if (error) throw error;
+              if (newConsultation) {
+                const mappedConsultation = {
+                  ...newConsultation,
+                  patientId: newConsultation.patient_id,
+                  startTime: (newConsultation as any).start_time,
+                  endTime: (newConsultation as any).end_time
+                };
+                setConsultations(prev => [mappedConsultation, ...prev]);
+                
+                // Update patient's last visit
+                const lastVisit = new Date(data.endTime).toISOString().split('T')[0];
+                await supabase
+                  .from('patients')
+                  .update({ last_visit: lastVisit })
+                  .eq('id', data.patientId);
+                
+                setPatients(prev => prev.map(p => p.id === data.patientId ? { ...p, last_visit: lastVisit } : p));
+                if (selectedPatient?.id === data.patientId) {
+                  setSelectedPatient({ ...selectedPatient, last_visit: lastVisit });
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error saving consultation:', error);
+          } finally {
+            setIsConsultationModalOpen(false);
+            setEditingConsultation(null);
+          }
+        }}
+        patient={selectedPatient}
+        editingConsultation={editingConsultation}
+      />
+      <ConfirmationModal 
+        isOpen={!!consultationToDelete}
+        onClose={() => setConsultationToDelete(null)}
+        onConfirm={async () => {
+          if (!supabase) return;
+          if (consultationToDelete) {
+            try {
+              const { error } = await supabase
+                .from('consultations')
+                .delete()
+                .eq('id', consultationToDelete);
+              
+              if (error) throw error;
+              setConsultations(prev => prev.filter(c => c.id !== consultationToDelete));
+            } catch (error) {
+              console.error('Error deleting consultation:', error);
+            } finally {
+              setConsultationToDelete(null);
+            }
+          }
+        }}
+        title="Excluir Consulta"
+        message="Tem certeza que deseja excluir este registro de consulta? Esta ação não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Manter"
+      />
+      <ConfirmationModal 
+        isOpen={!!patientToDelete}
+        onClose={() => setPatientToDelete(null)}
+        onConfirm={handleDeletePatient}
+        title="Excluir Paciente"
+        message={`Tem certeza que deseja excluir "${patientToDelete?.name}"? Esta ação apagará permanentemente todo o histórico de consultas, agendamentos e evoluções em cascata. Não é possível desfazer.`}
+        confirmText="Excluir Permanentemente"
+        cancelText="Cancelar"
+      />
+    </div>
+  );
+}
