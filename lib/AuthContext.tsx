@@ -33,8 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Fallback to session data if profile fetch fails (e.g. trigger didn't run)
       const { data: { session } } = await supabase.auth.getSession();
       if (session && session.user.id === userId) {
-        const isSpecialAdmin = session.user.email === 'auriculusterapia@gmail.com';
-        const role = isSpecialAdmin ? 'ADMIN' : ((session.user.user_metadata?.role as UserRole) || 'PROFESSIONAL');
+        const role = (session.user.user_metadata?.role as UserRole) || 'PROFESSIONAL';
+        const isAdmin = role === 'ADMIN';
         
         const fallbackUser: User = {
           id: session.user.id,
@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: session.user.email || '',
           role: role,
           avatar: `https://picsum.photos/seed/${session.user.id}/200/200`,
-          permissions: isSpecialAdmin ? ADMIN_PERMISSIONS : [],
+          permissions: isAdmin ? ADMIN_PERMISSIONS : [],
         };
         setUser(fallbackUser);
       }
@@ -51,11 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (data) {
       console.log('Profile data fetched:', data);
-      const isSpecialAdmin = data.email === 'auriculusterapia@gmail.com';
-      const role = isSpecialAdmin ? 'ADMIN' : (data.role as UserRole);
+      const role = data.role as UserRole;
+      const isAdmin = role === 'ADMIN';
       
-      // Prioritize DB permissions, then role defaults
-      const finalPermissions = isSpecialAdmin 
+      // ADMINs sempre recebem todas as permissões; outros recebem as do perfil
+      const finalPermissions = isAdmin 
         ? ADMIN_PERMISSIONS 
         : Array.isArray(data.permissions)
           ? data.permissions

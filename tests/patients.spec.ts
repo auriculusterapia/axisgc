@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 test.describe.configure({ mode: 'serial' });
 
 const TEST_USER = {
-  email: 'auriculusterapia@gmail.com',
+  email: 'admin@axisgc.com.br',
   password: 'Navicom!f!0'
 };
 
