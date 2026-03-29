@@ -53,7 +53,7 @@ export default function FinancialView({
   const [itemToDelete, setItemToDelete] = useState<{ id: string; source: 'manual' | 'appointment' } | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'INCOME' | 'EXPENSE'>('all');
-  const [timeRange, setTimeRange] = useState<'7d' | 'mes' | 'semestre' | 'ano'>('mes');
+  const [timeRange, setTimeRange] = useState<'hoje' | '7d' | 'mes' | 'semestre' | 'ano'>('mes');
 
   const [formData, setFormData] = useState({
     description: '',
@@ -78,13 +78,13 @@ export default function FinancialView({
     if (!sb) { setIsLoadingManual(false); return; }
     setIsLoadingManual(true);
     try {
-      const { data, error } = await sb
+      const { data, error } = await (sb as any)
         .from('financial_transactions')
         .select('*')
         .order('date', { ascending: false });
       if (error) throw error;
       if (data) {
-        setManualTransactions(data.map(t => ({
+        setManualTransactions((data as any[]).map(t => ({
           ...t,
           type: t.type as 'INCOME' | 'EXPENSE',
           source: 'manual' as const,
@@ -134,7 +134,28 @@ export default function FinancialView({
   const chartData = useMemo(() => {
     const buckets: { label: string; income: number; expense: number }[] = [];
 
-    if (timeRange === '7d') {
+    if (timeRange === 'hoje') {
+      const todayStr = now.toISOString().split('T')[0];
+      for (let i = 0; i < 6; i++) {
+        const hStart = i * 4;
+        const hEnd = hStart + 3;
+        const label = `${String(hStart).padStart(2, '0')}-${String(hEnd).padStart(2, '0')}h`;
+        
+        // Simulação de distribuição horária simples (já que t.date não costuma ter H/M no banco se for tipo date)
+        // Se t.created_at existisse, poderíamos ser mais precisos. 
+        // Para agora, vamos somar tudo no primeiro bloco comercial (08-12h) se não tivermos hora
+        const income = allTransactions.filter(t => t.date === todayStr && t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
+        const expense = allTransactions.filter(t => t.date === todayStr && t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
+        
+        // Como o banco armazena apenas data YYYY-MM-DD, vamos mostrar o total no slot das 12h-16h 
+        // ou dividir se tivéssemos timestamp. Por enquanto, vamos concentrar ou deixar vazio os slots
+        if (i === 3) { // 12-15h
+           buckets.push({ label, income, expense });
+        } else {
+           buckets.push({ label, income: 0, expense: 0 });
+        }
+      }
+    } else if (timeRange === '7d') {
       for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(now.getDate() - i);
@@ -198,7 +219,7 @@ export default function FinancialView({
     if (!sb || !user) return;
     setIsSaving(true);
     try {
-      const { data, error } = await sb.from('financial_transactions').insert([{
+      const { data, error } = await (sb as any).from('financial_transactions').insert([{
         type: modalType,
         description: formData.description,
         amount: parseFloat(formData.amount),
@@ -209,7 +230,17 @@ export default function FinancialView({
       }]).select().single();
       if (error) throw error;
       if (data) {
-        setManualTransactions(prev => [{ ...data, type: data.type as 'INCOME' | 'EXPENSE', source: 'manual' as const }, ...prev]);
+        const newTx: FinancialTransaction = {
+          id: (data as any).id,
+          type: (data as any).type as 'INCOME' | 'EXPENSE',
+          description: (data as any).description,
+          amount: (data as any).amount,
+          category: (data as any).category,
+          date: (data as any).date,
+          notes: (data as any).notes,
+          source: 'manual' as const,
+        };
+        setManualTransactions(prev => [newTx, ...prev]);
       }
       setIsModalOpen(false);
     } catch (err: any) {
@@ -238,7 +269,7 @@ export default function FinancialView({
       setManualTransactions(p => p.filter(t => t.id !== itemToDelete.id));
       setShowDeleteConfirm(false);
       try {
-        const { error } = await sb.from('financial_transactions').delete().eq('id', itemToDelete.id);
+        const { error } = await (sb as any).from('financial_transactions').delete().eq('id', itemToDelete.id);
         if (error) throw error;
       } catch { setManualTransactions(prev); }
     } else {
@@ -377,8 +408,8 @@ export default function FinancialView({
             <h4 className="text-xl font-headline font-bold text-on-surface">Entradas × Saídas</h4>
             <p className="text-sm text-outline font-medium mt-0.5">Comparativo por período</p>
           </div>
-          <div className="flex bg-surface-container-low p-1 rounded-2xl gap-1">
-            {[{ id: '7d', label: '7d' }, { id: 'mes', label: 'Mês' }, { id: 'semestre', label: 'Semestre' }, { id: 'ano', label: 'Ano' }].map(r => (
+          <div className="flex bg-surface-container-low p-1 rounded-2xl gap-1 flex-wrap">
+            {[{ id: 'hoje', label: 'Hoje' }, { id: '7d', label: '7d' }, { id: 'mes', label: 'Mês' }, { id: 'semestre', label: 'Semestre' }, { id: 'ano', label: 'Ano' }].map(r => (
               <button key={r.id} onClick={() => setTimeRange(r.id as any)}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${timeRange === r.id ? 'bg-white shadow text-on-surface' : 'text-outline hover:text-on-surface'}`}>
                 {r.label}
@@ -393,24 +424,62 @@ export default function FinancialView({
           <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-rose-400" /><span className="text-xs font-bold text-outline">Despesas</span></div>
         </div>
 
-        <div className="flex items-end justify-between gap-3 h-48 px-2">
+        <div className="flex items-end justify-between gap-3 px-2" style={{ height: '240px' }}>
           {chartData.map((b, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-2">
-              <div className="w-full flex items-end gap-1 h-36">
-                <motion.div
-                  initial={{ height: 0 }} animate={{ height: `${b.incomeH}%` }}
-                  transition={{ duration: 0.8, delay: i * 0.05, ease: 'easeOut' }}
-                  className="flex-1 bg-emerald-400 rounded-t-xl min-h-[4px]"
-                  title={`Receita: ${formatCurrency(b.income)}`}
-                />
-                <motion.div
-                  initial={{ height: 0 }} animate={{ height: `${b.expenseH}%` }}
-                  transition={{ duration: 0.8, delay: i * 0.05 + 0.1, ease: 'easeOut' }}
-                  className="flex-1 bg-rose-400 rounded-t-xl min-h-[4px]"
-                  title={`Despesa: ${formatCurrency(b.expense)}`}
-                />
+            <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative" style={{ height: '100%' }}>
+              
+              {/* Value labels above bars */}
+              <div className="w-full flex gap-1 items-end justify-center px-1" style={{ height: 'calc(100% - 25px)' }}>
+                {/* Income Bar */}
+                <div className="flex-1 flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                  {b.income > 0 && (
+                    <motion.span 
+                      initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+                      className="text-[10px] font-black text-emerald-700 mb-1 leading-none bg-emerald-50 px-1.5 py-0.5 rounded-md shadow-sm border border-emerald-100 z-10"
+                    >
+                      {b.income >= 1000 ? `${(b.income/1000).toFixed(1)}k` : b.income.toFixed(0)}
+                    </motion.span>
+                  )}
+                  <motion.div
+                    initial={{ height: 0 }} animate={{ height: `${b.incomeH}%` }}
+                    transition={{ duration: 0.8, delay: i * 0.05, ease: 'circOut' }}
+                    className="w-full bg-gradient-to-t from-emerald-500 to-emerald-400 hover:from-emerald-600 hover:to-emerald-500 rounded-t-xl transition-all cursor-pointer shadow-sm relative group/bar"
+                    style={{ minHeight: b.income > 0 ? '6px' : '0' }}
+                  >
+                     <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/bar:opacity-100 transition-opacity rounded-t-xl" />
+                  </motion.div>
+                </div>
+
+                {/* Expense Bar */}
+                <div className="flex-1 flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                  {b.expense > 0 && (
+                    <motion.span 
+                      initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+                      className="text-[10px] font-black text-rose-700 mb-1 leading-none bg-rose-50 px-1.5 py-0.5 rounded-md shadow-sm border border-rose-100 z-10"
+                    >
+                      {b.expense >= 1000 ? `${(b.expense/1000).toFixed(1)}k` : b.expense.toFixed(0)}
+                    </motion.span>
+                  )}
+                  <motion.div
+                    initial={{ height: 0 }} animate={{ height: `${b.expenseH}%` }}
+                    transition={{ duration: 0.8, delay: i * 0.05 + 0.1, ease: 'circOut' }}
+                    className="w-full bg-gradient-to-t from-rose-500 to-rose-400 hover:from-rose-600 hover:to-rose-500 rounded-t-xl transition-all cursor-pointer shadow-sm relative group/bar"
+                    style={{ minHeight: b.expense > 0 ? '6px' : '0' }}
+                  >
+                    <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/bar:opacity-100 transition-opacity rounded-t-xl" />
+                  </motion.div>
+                </div>
               </div>
-              <span className="text-[10px] font-bold text-outline text-center">{b.label}</span>
+
+              {/* Tooltip on hover (Full value) */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 pointer-events-none translate-y-2 group-hover:translate-y-0">
+                <div className="bg-slate-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-xl flex flex-col gap-0.5">
+                   {b.income > 0 && <span className="text-emerald-400">Receita: {formatCurrency(b.income)}</span>}
+                   {b.expense > 0 && <span className="text-rose-400">Despesa: {formatCurrency(b.expense)}</span>}
+                </div>
+              </div>
+
+              <span className="text-[10px] font-bold text-outline text-center w-full truncate pb-1">{b.label}</span>
             </div>
           ))}
         </div>
