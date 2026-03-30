@@ -156,7 +156,14 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
   const [serviceFormData, setServiceFormData] = useState({ name: '', price: 0 });
   const [serviceToDelete, setServiceToDelete] = useState<ConsultationType | null>(null);
   
-  const [notifications, setNotifications] = useState(true);
+  const [notifications, setNotifications] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('axis_notifications_enabled');
+      return saved !== null ? JSON.parse(saved) : true;
+    }
+    return true;
+  });
+  
   const [theme, setTheme] = useState('light');
   const [language, setLanguage] = useState('Português (Brasil)');
   const [currency, setCurrency] = useState('BRL (R$)');
@@ -198,6 +205,10 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
   useEffect(() => {
     localStorage.setItem('auriculocare_clinic', JSON.stringify(clinic));
   }, [clinic]);
+
+  useEffect(() => {
+    localStorage.setItem('axis_notifications_enabled', JSON.stringify(notifications));
+  }, [notifications]);
 
   useEffect(() => {
     localStorage.setItem('auriculocare_consultation_types', JSON.stringify(consultationTypes));

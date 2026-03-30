@@ -23,7 +23,7 @@ import PatientModal from '@/components/PatientModal';
 import ConsultationModal from '@/components/ConsultationModal';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { User, ROLE_PERMISSIONS, ADMIN_PERMISSIONS } from '@/types/auth';
-import { Shield } from 'lucide-react';
+import { Shield, Check, AlertCircle, X, Bell } from 'lucide-react';
 import { logAction } from '@/lib/auditLogService';
 
 const INITIAL_PATIENTS = [
@@ -103,6 +103,17 @@ export default function Home() {
   const [requireExtraConsultationConfirm, setRequireExtraConsultationConfirm] = useState(true);
   const [isUnscheduledCandidate, setIsUnscheduledCandidate] = useState(false);
 
+  // Notifications State
+  const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('axis_notifications_history');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+  const [activeToasts, setActiveToasts] = useState<any[]>([]);
+
   useEffect(() => {
     const loadSpecialties = () => {
       const saved = localStorage.getItem('axis_specialties');
@@ -126,14 +137,25 @@ export default function Home() {
     const savedConfirmSetting = localStorage.getItem('axis_confirm_extra_consultation');
     setRequireExtraConsultationConfirm(savedConfirmSetting !== null ? JSON.parse(savedConfirmSetting) : true);
     
+    // Load notifications setting
+    const savedNotifSetting = localStorage.getItem('axis_notifications_enabled');
+    setIsNotificationsEnabled(savedNotifSetting !== null ? JSON.parse(savedNotifSetting) : true);
+    
     // Listen for storage changes to sync across components (like SettingsView updating it)
     window.addEventListener('storage', (e) => {
       if (e.key === 'axis_specialties') loadSpecialties();
       if (e.key === 'axis_confirm_extra_consultation' && e.newValue !== null) {
         setRequireExtraConsultationConfirm(JSON.parse(e.newValue));
       }
+      if (e.key === 'axis_notifications_enabled' && e.newValue !== null) {
+        setIsNotificationsEnabled(JSON.parse(e.newValue));
+      }
     });
   }, [activeView]);
+
+  useEffect(() => {
+    localStorage.setItem('axis_notifications_history', JSON.stringify(notifications));
+  }, [notifications]);
 
   useEffect(() => {
     if (user) {
@@ -216,6 +238,15 @@ export default function Home() {
           color: COLORS_ARRAY[Math.floor(Math.random() * COLORS_ARRAY.length)]
         }));
         setInventoryItems(mappedInventory);
+        
+        // Trigger low stock notifications
+        inventoryData.filter(item => Number(item.quantity) <= Number(item.min_quantity)).forEach(item => {
+          // Only add if not already notified (simple check)
+          const alreadyNotified = notifications.some(n => n.title === 'Estoque Baixo' && n.message.includes(item.name));
+          if (!alreadyNotified) {
+            addNotification('Estoque Baixo', `O item ${item.name} atingiu o nível crítico (${item.quantity} ${item.unit}).`, 'warning');
+          }
+        });
         
         // Show alert if there are low stock items
         const lowStock = mappedInventory.filter(item => item.quantity <= item.min_quantity);
@@ -404,6 +435,35 @@ export default function Home() {
   const handleNewAppointment = () => {
     setActiveView('calendar');
     setIsCalendarModalOpen(true);
+  };
+
+  const addNotification = useCallback((title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    if (!isNotificationsEnabled) return;
+    
+    const newNotif = {
+      id: Date.now().toString(),
+      title,
+      message,
+      type,
+      time: new Date().toISOString(),
+      read: false
+    };
+    
+    setNotifications(prev => [newNotif, ...prev].slice(0, 30));
+    
+    // Add to toasts
+    setActiveToasts(prev => [...prev, newNotif]);
+    setTimeout(() => {
+      setActiveToasts(prev => prev.filter(t => t.id !== newNotif.id));
+    }, 5000);
+  }, [isNotificationsEnabled]);
+
+  const markNotificationAsRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+  
+  const clearAllNotifications = () => {
+    setNotifications([]);
   };
 
   const handleDeletePatient = async () => {
@@ -824,6 +884,12 @@ export default function Home() {
               setIsUnscheduledCandidate(!hasTodayAppointment);
               setEditingConsultation(null);
               setIsConsultationModalOpen(true);
+              
+              addNotification(
+                'Consulta Iniciada', 
+                `Atendimento com ${selectedPatient?.name} iniciado com sucesso.`, 
+                'success'
+              );
             }}
             onEditConsultation={(consultation) => {
               setEditingConsultation(consultation);
@@ -915,15 +981,64 @@ export default function Home() {
   return (
     <div className="flex min-h-[100dvh] bg-surface pb-16 md:pb-0">
       <div className="no-print hidden md:block">
-        <Sidebar activeView={activeView} setActiveView={handleViewChange} onNewAppointment={handleNewAppointment} onLogout={signOut} user={user} />
+        <Sidebar 
+          activeView={activeView} 
+          setActiveView={handleViewChange} 
+          onNewAppointment={handleNewAppointment} 
+          onLogout={signOut} 
+          user={user}
+        />
       </div>
       
       <main className="flex-1 flex flex-col h-screen overflow-hidden print:h-auto print:overflow-visible">
         <div className="no-print">
-          <TopBar user={user} onLogout={handleLogout} />
+          <TopBar 
+            user={user} 
+            onLogout={handleLogout}
+            notifications={notifications}
+            onMarkAsRead={markNotificationAsRead}
+            onClearAll={clearAllNotifications}
+          />
         </div>
         
         <div className="flex-1 overflow-hidden relative print:overflow-visible print:h-auto">
+          {/* Toasts Overlay */}
+          <div className="fixed top-24 right-8 z-[100] pointer-events-none flex flex-col gap-3">
+            <AnimatePresence>
+              {activeToasts.map((toast) => (
+                <motion.div
+                  key={toast.id}
+                  initial={{ opacity: 0, x: 50, scale: 0.9 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 20, scale: 0.95 }}
+                  className={`pointer-events-auto p-5 rounded-[1.5rem] shadow-2xl border border-white/20 backdrop-blur-xl flex items-start gap-4 min-w-[320px] max-w-md ${
+                    toast.type === 'success' ? 'bg-emerald-500/90 text-white' :
+                    toast.type === 'warning' ? 'bg-amber-500/90 text-white' :
+                    toast.type === 'error' ? 'bg-rose-500/90 text-white' :
+                    'bg-slate-800/90 text-white'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                    {toast.type === 'success' ? <Check size={20} /> : 
+                     toast.type === 'warning' ? <AlertCircle size={20} /> : 
+                     toast.type === 'error' ? <X size={20} /> : 
+                     <Bell size={20} />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-sm">{toast.title}</p>
+                    <p className="text-xs opacity-90 mt-0.5 leading-relaxed">{toast.message}</p>
+                  </div>
+                  <button 
+                    onClick={() => setActiveToasts(prev => prev.filter(t => t.id !== toast.id))}
+                    className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
           <AnimatePresence mode="wait">
             <motion.div
               key={activeView}
@@ -1011,6 +1126,7 @@ export default function Home() {
                 .single();
               
               if (error) throw error;
+              addNotification('Consulta Registrada', `Atendimento de ${selectedPatient?.name} salvo com sucesso.`, 'success');
               if (newConsultation) {
                 const mappedConsultation = {
                   ...newConsultation,

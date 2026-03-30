@@ -1,17 +1,30 @@
 'use client';
 
-import { Search, Bell, HelpCircle, User as UserIcon, LogOut } from 'lucide-react';
+import { Search, Bell, HelpCircle, User as UserIcon, LogOut, Check, AlertCircle, X } from 'lucide-react';
 import { User, ROLE_LABELS } from '@/types/auth';
 import { getInitials } from '@/lib/utils';
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface TopBarProps {
   user?: User | null;
   onLogout?: () => void;
+  notifications?: any[];
+  onMarkAsRead?: (id: string) => void;
+  onClearAll?: () => void;
 }
 
-export default function TopBar({ user, onLogout }: TopBarProps) {
+export default function TopBar({ 
+  user, 
+  onLogout,
+  notifications = [],
+  onMarkAsRead,
+  onClearAll
+}: TopBarProps) {
   const [profileName, setProfileName] = useState(user?.name || 'Dr. Elena Wu');
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -44,10 +57,104 @@ export default function TopBar({ user, onLogout }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-4">
-        <button className="p-2.5 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors relative">
-          <Bell size={20} />
-          <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-        </button>
+        <div className="relative">
+          <button 
+            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+            className="p-2.5 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors relative"
+          >
+            <Bell size={20} />
+            {unreadCount > 0 && (
+              <span className="absolute top-2 right-2 w-4 h-4 bg-red-500 text-white text-[8px] font-black rounded-full border-2 border-white flex items-center justify-center">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+
+          <AnimatePresence>
+            {isNotificationsOpen && (
+              <>
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsNotificationsOpen(false)}
+                  className="fixed inset-0 z-40"
+                />
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-80 bg-white rounded-3xl shadow-2xl border border-outline-variant/10 z-50 overflow-hidden flex flex-col max-h-[500px]"
+                >
+                  <div className="p-5 border-b border-outline-variant/5 flex items-center justify-between bg-surface-container-low/30">
+                    <h3 className="text-sm font-bold text-on-surface">Notificações</h3>
+                    <button 
+                      onClick={() => {
+                        onClearAll?.();
+                        setIsNotificationsOpen(false);
+                      }}
+                      className="text-[10px] font-bold text-primary hover:underline uppercase tracking-widest"
+                    >
+                      Limpar Tudo
+                    </button>
+                  </div>
+                  
+                  <div className="overflow-y-auto custom-scrollbar flex-1">
+                    {notifications.length > 0 ? (
+                      notifications.map((n) => (
+                        <div 
+                          key={n.id} 
+                          onClick={() => {
+                            if (!n.read) onMarkAsRead?.(n.id);
+                          }}
+                          className={`p-4 border-b border-outline-variant/5 hover:bg-surface-container-low transition-all cursor-pointer relative group ${!n.read ? 'bg-primary/[0.02]' : ''}`}
+                        >
+                          <div className="flex gap-4">
+                            <div className={`w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center ${
+                              n.type === 'success' ? 'bg-emerald-50 text-emerald-500' :
+                              n.type === 'warning' ? 'bg-amber-50 text-amber-500' :
+                              n.type === 'error' ? 'bg-rose-50 text-rose-500' :
+                              'bg-blue-50 text-blue-500'
+                            }`}>
+                              {n.type === 'success' ? <Check size={18} /> : 
+                               n.type === 'warning' ? <AlertCircle size={18} /> : 
+                               n.type === 'error' ? <X size={18} /> : 
+                               <HelpCircle size={18} />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-bold truncate ${!n.read ? 'text-on-surface' : 'text-on-surface-variant'}`}>{n.title}</p>
+                              <p className="text-[10px] text-on-surface-variant line-clamp-2 mt-0.5">{n.message}</p>
+                              <p className="text-[8px] text-outline mt-2 font-bold uppercase tracking-widest">{new Date(n.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                            {!n.read && (
+                              <div className="w-2 h-2 bg-primary rounded-full mt-1.5 shrink-0"></div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-10 text-center space-y-3">
+                        <div className="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mx-auto text-outline-variant">
+                          <Bell size={24} />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-on-surface-variant">Tudo limpo!</p>
+                          <p className="text-[10px] text-outline font-medium">Você não tem novas notificações no momento.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {notifications.length > 0 && (
+                    <div className="p-4 bg-surface-container-low/50 text-center border-t border-outline-variant/5">
+                      <p className="text-[10px] text-outline font-bold uppercase tracking-widest">Fim das notificações</p>
+                    </div>
+                  )}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
         <button className="p-2.5 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors">
           <HelpCircle size={20} />
         </button>
