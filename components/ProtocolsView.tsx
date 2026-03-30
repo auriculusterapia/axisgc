@@ -77,6 +77,10 @@ export default function ProtocolsView({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProtocol, setEditingProtocol] = useState<Protocol | null>(null);
   
+  const canCreate = user?.permissions.includes('protocols:create') || user?.role === 'ADMIN';
+  const canEdit = user?.permissions.includes('protocols:edit') || user?.role === 'ADMIN';
+  const canDelete = user?.permissions.includes('protocols:delete') || user?.role === 'ADMIN';
+
   // Form State
   const [formData, setFormData] = useState({
     title: '',
@@ -146,12 +150,14 @@ export default function ProtocolsView({
           <h2 className="text-4xl font-bold font-headline text-on-surface">Biblioteca de Protocolos</h2>
           <p className="text-on-surface-variant text-lg mt-2 font-medium">Gerencie e descubra protocolos de tratamento baseados em MTC.</p>
         </div>
-        <button 
-          onClick={() => handleOpenModal()}
-          className="px-8 py-4 rounded-2xl text-sm font-bold bg-primary text-white shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
-        >
-          <Plus size={20} /> Criar Novo Protocolo
-        </button>
+        {canCreate && (
+          <button 
+            onClick={() => handleOpenModal()}
+            className="px-8 py-4 rounded-2xl text-sm font-bold bg-primary text-white shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
+          >
+            <Plus size={20} /> Criar Novo Protocolo
+          </button>
+        )}
       </section>
 
       {/* Search and Filter */}
@@ -202,18 +208,22 @@ export default function ProtocolsView({
                   <BookOpen size={28} />
                 </div>
                 <div className="flex gap-2">
-                  <button 
-                    onClick={() => handleOpenModal(protocol)}
-                    className="p-2.5 rounded-xl hover:bg-surface-container-low text-outline hover:text-primary transition-all"
-                  >
-                    <Edit2 size={20} />
-                  </button>
-                  <button 
-                    onClick={() => handleDelete(protocol.id)}
-                    className="p-2.5 rounded-xl hover:bg-rose-50 text-outline hover:text-rose-500 transition-all"
-                  >
-                    <Trash2 size={20} />
-                  </button>
+                  {canEdit && (
+                    <button 
+                      onClick={() => handleOpenModal(protocol)}
+                      className="p-2.5 rounded-xl hover:bg-surface-container-low text-outline hover:text-primary transition-all"
+                    >
+                      <Edit2 size={20} />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button 
+                      onClick={() => handleDelete(protocol.id)}
+                      className="p-2.5 rounded-xl hover:bg-rose-50 text-outline hover:text-rose-500 transition-all"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  )}
                 </div>
               </div>
 

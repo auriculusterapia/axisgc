@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Play, Square, Check } from 'lucide-react';
+import { X, Clock, Play, Square, Check, Plus, Minus, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ConsultationModalProps {
@@ -11,6 +11,7 @@ interface ConsultationModalProps {
   patient: any;
   activeConsultation?: any;
   editingConsultation?: any;
+  inventoryItems: any[];
 }
 
 type ConsultationStatus = 'idle' | 'running' | 'finished';
@@ -21,7 +22,8 @@ export default function ConsultationModal({
   onSave, 
   patient,
   activeConsultation,
-  editingConsultation
+  editingConsultation,
+  inventoryItems
 }: ConsultationModalProps) {
   const [status, setStatus] = useState<ConsultationStatus>(() => {
     if (editingConsultation) return 'finished';
@@ -32,7 +34,8 @@ export default function ConsultationModal({
   const [startTime, setStartTime] = useState(editingConsultation?.startTime || activeConsultation?.startTime || null);
   const [endTime, setEndTime] = useState(editingConsultation?.endTime || '');
   const [notes, setNotes] = useState(editingConsultation?.notes || activeConsultation?.notes || '');
-  const [type, setType] = useState(editingConsultation?.type || activeConsultation?.type || 'Auriculoterapia');
+  const [specialty, setSpecialty] = useState(editingConsultation?.type || activeConsultation?.type || 'Auriculoterapia');
+  const [usedMaterials, setUsedMaterials] = useState<any[]>(editingConsultation?.materials_used || []);
   
   const [elapsedTime, setElapsedTime] = useState(() => {
     if (editingConsultation && editingConsultation.startTime && editingConsultation.endTime) {
@@ -88,7 +91,8 @@ export default function ConsultationModal({
       startTime: startTime || new Date().toISOString(),
       endTime: finalEndTime,
       notes,
-      type,
+      type: specialty,
+      materials_used: usedMaterials,
       patientId: patient.id,
       id: editingConsultation?.id
     });
@@ -190,10 +194,10 @@ export default function ConsultationModal({
 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Tipo de Atendimento</label>
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Especialidade</label>
                     <select 
-                      value={type}
-                      onChange={e => setType(e.target.value)}
+                      value={specialty}
+                      onChange={e => setSpecialty(e.target.value)}
                       className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none transition-all"
                     >
                       <option value="Auriculoterapia">Auriculoterapia</option>
@@ -211,6 +215,67 @@ export default function ConsultationModal({
                       className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium min-h-[120px] resize-none transition-all"
                       placeholder="Descreva a evolução, pontos utilizados ou observações..."
                     />
+                  </div>
+
+                  {/* Materials Section */}
+                  <div className="space-y-4 pt-4 border-t border-outline-variant/10">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-outline uppercase tracking-widest flex items-center gap-2">
+                        <Package size={14} /> Materiais Utilizados
+                      </label>
+                      <button 
+                        onClick={() => setUsedMaterials([...usedMaterials, { itemId: '', quantity: 1 }])}
+                        className="text-[10px] font-bold text-primary uppercase tracking-widest hover:underline flex items-center gap-1"
+                      >
+                        <Plus size={12} /> Adicionar
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {usedMaterials.map((material, index) => (
+                        <div key={index} className="flex gap-3 items-center">
+                          <select 
+                            value={material.itemId}
+                            onChange={(e) => {
+                              const newList = [...usedMaterials];
+                              newList[index].itemId = e.target.value;
+                              setUsedMaterials(newList);
+                            }}
+                            className="flex-1 min-w-0 px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 outline-none text-sm font-medium"
+                          >
+                            <option value="">Selecionar item...</option>
+                            {inventoryItems.map(item => (
+                              <option key={item.id} value={item.id}>
+                                {item.name} ({item.quantity} {item.unit})
+                              </option>
+                            ))}
+                          </select>
+                          <div className="flex flex-col items-center">
+                            <input 
+                              type="number" 
+                              min="1"
+                              value={material.quantity}
+                              onChange={(e) => {
+                                const newList = [...usedMaterials];
+                                newList[index].quantity = parseInt(e.target.value) || 1;
+                                setUsedMaterials(newList);
+                              }}
+                              className="w-16 px-2 py-3 bg-white rounded-xl border border-outline-variant/20 outline-none text-sm font-bold text-center shadow-sm"
+                            />
+                            <span className="text-[8px] font-bold text-outline-variant uppercase mt-1">Qtde</span>
+                          </div>
+                          <button 
+                            onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== index))}
+                            className="p-2 text-outline hover:text-rose-500 transition-all flex-shrink-0"
+                          >
+                            <Minus size={18} />
+                          </button>
+                        </div>
+                      ))}
+                      {usedMaterials.length === 0 && (
+                        <p className="text-[10px] text-outline-variant italic">Nenhum material registrado para esta sessão.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 

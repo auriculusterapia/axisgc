@@ -151,7 +151,8 @@ export default function Home() {
           ...c,
           patientId: c.patient_id,
           startTime: (c as any).start_time,
-          endTime: (c as any).end_time
+          endTime: (c as any).end_time,
+          type: c.main_complaint
         })));
       }
       if (evaluationsData) {
@@ -762,10 +763,15 @@ export default function Home() {
       case 'patient-detail':
         return (
           <PatientDetailView 
-            patient={selectedPatient} 
+            patient={selectedPatient}
             consultations={consultations.filter(c => c.patientId === selectedPatient?.id)}
             evaluations={evaluations.filter(e => e.patientId === selectedPatient?.id)}
-            onBack={() => setActiveView('patients')}
+            inventoryItems={inventoryItems}
+            user={user}
+            onBack={() => {
+              setSelectedPatient(null);
+              setActiveView('patients');
+            }}
             onEditPersonal={() => {
               setEditingPatient(selectedPatient);
               setIsPatientModalOpen(true);
@@ -781,7 +787,6 @@ export default function Home() {
             onDeleteConsultation={(consultationId) => {
               setConsultationToDelete(consultationId);
             }}
-            user={user}
           />
         );
       case 'evaluations':
@@ -928,6 +933,7 @@ export default function Home() {
               end_time: data.endTime,
               notes: data.notes,
               main_complaint: data.type,
+              materials_used: data.materials_used || [],
               updated_at: new Date().toISOString()
             };
 
@@ -960,7 +966,8 @@ export default function Home() {
                   ...newConsultation,
                   patientId: newConsultation.patient_id,
                   startTime: (newConsultation as any).start_time,
-                  endTime: (newConsultation as any).end_time
+                  endTime: (newConsultation as any).end_time,
+                  type: newConsultation.main_complaint
                 };
                 setConsultations(prev => [mappedConsultation, ...prev]);
                 
@@ -977,6 +984,48 @@ export default function Home() {
                 }
               }
             }
+
+            // --- INTEGRATION: Inventory Stock Reduction & Financial Expense ---
+            if (data.materials_used && data.materials_used.length > 0) {
+              let totalMaterialCost = 0;
+              for (const mat of data.materials_used) {
+                if (!mat.itemId || !mat.quantity) continue;
+                
+                const item = inventoryItems.find(i => i.id === mat.itemId);
+                if (item) {
+                  // 1. Reduce inventory_items quantity
+                  const newQty = Math.max(0, Number(item.quantity) - Number(mat.quantity));
+                  await supabase.from('inventory_items').update({ quantity: newQty }).eq('id', mat.itemId);
+                  
+                  // 2. Add inventory_transactions record
+                  await supabase.from('inventory_transactions').insert([{
+                    item_id: mat.itemId,
+                    type: 'OUT',
+                    quantity: mat.quantity,
+                    notes: `Uso em consulta: ${data.type} - Paciente: ${selectedPatient?.name}`,
+                    created_by: user?.id
+                  }]);
+                  
+                  // 3. Accumulate cost for financial entry
+                  totalMaterialCost += (Number(item.unit_cost) || 0) * Number(mat.quantity);
+                }
+              }
+
+              // 4. Create financial_transactions record (Expense)
+              if (totalMaterialCost > 0) {
+                await (supabase as any).from('financial_transactions').insert([{
+                  type: 'EXPENSE',
+                  description: `Materiais: ${data.type} - Paciente: ${selectedPatient?.name}`,
+                  amount: totalMaterialCost,
+                  category: 'Materiais',
+                  date: new Date(data.startTime).toISOString().split('T')[0],
+                  created_by: user?.id
+                }]);
+              }
+            }
+
+            // Refresh all data to reflect changes in Inventory and Financial views
+            await fetchData();
           } catch (error) {
             console.error('Error saving consultation:', error);
           } finally {
@@ -985,6 +1034,7 @@ export default function Home() {
           }
         }}
         patient={selectedPatient}
+        inventoryItems={inventoryItems}
         editingConsultation={editingConsultation}
       />
       <ConfirmationModal 

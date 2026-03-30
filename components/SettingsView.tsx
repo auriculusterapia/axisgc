@@ -117,6 +117,10 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
     fetchAuditState();
   }, []);
 
+  const canEditClinic = user?.permissions.includes('settings:clinic') || user?.role === 'ADMIN';
+  const canDelete = user?.permissions.includes('settings:delete') || user?.role === 'ADMIN';
+  const canManageUsers = user?.permissions.includes('settings:users') || user?.role === 'ADMIN';
+
   const handleToggleAudit = async () => {
     if (!supabase || user?.role !== 'ADMIN') return;
     const newState = !auditEnabled;
@@ -871,14 +875,16 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
                           >
                             <Edit2 size={18} />
                           </button>
-                          <button 
-                            onClick={() => {
-                              setServiceToDelete(type);
-                            }}
-                            className="p-2 text-outline hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          {canDelete && (
+                            <button 
+                              onClick={() => {
+                                setServiceToDelete(type);
+                              }}
+                              className="p-2 text-outline hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -65,7 +65,7 @@ export default function FinancialView({
 
   const canCreate = user?.permissions.includes('financial:create') || user?.role === 'ADMIN';
   const canReport = user?.permissions.includes('financial:reports') || user?.role === 'ADMIN';
-  const canDelete = user?.role === 'ADMIN';
+  const canDelete = user?.permissions.includes('financial:delete') || user?.role === 'ADMIN';
 
   useEffect(() => { setAppointments(initialAppointments); }, [initialAppointments]);
 

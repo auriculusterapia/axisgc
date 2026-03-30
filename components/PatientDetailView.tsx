@@ -37,6 +37,7 @@ interface PatientDetailViewProps {
   onStartConsultation: () => void;
   onEditConsultation: (consultation: any) => void;
   onDeleteConsultation: (consultationId: string) => void;
+  inventoryItems: any[];
   user?: User | null;
 }
 
@@ -49,6 +50,7 @@ export default function PatientDetailView({
   onStartConsultation,
   onEditConsultation,
   onDeleteConsultation,
+  inventoryItems,
   user
 }: PatientDetailViewProps) {
   const [notes, setNotes] = useState('');
@@ -456,7 +458,8 @@ export default function PatientDetailView({
                         <Clock size={24} />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-on-surface">{consultation.type}</p>
+                        <p className="text-[10px] font-bold text-outline-variant uppercase tracking-widest leading-none mb-1">Especialidade</p>
+                        <p className="text-sm font-bold text-on-surface">{consultation.type || 'Não informada'}</p>
                         <p className="text-xs text-on-surface-variant font-medium">
                           {start.toLocaleDateString('pt-BR')} • {start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às {end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </p>
@@ -495,6 +498,22 @@ export default function PatientDetailView({
                       <p className="text-sm text-on-surface-variant leading-relaxed italic">
                         &quot;{consultation.notes}&quot;
                       </p>
+                    </div>
+                  )}
+
+                  {consultation.materials_used && consultation.materials_used.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-outline-variant/10">
+                      <p className="text-[10px] font-bold text-outline uppercase tracking-widest mb-2">Materiais Utilizados</p>
+                      <div className="flex flex-wrap gap-2">
+                        {consultation.materials_used.map((mat: any, idx: number) => {
+                          const item = inventoryItems.find(i => i.id === mat.itemId);
+                          return (
+                            <span key={idx} className="px-3 py-1 bg-surface-container-high rounded-lg text-[10px] font-bold text-on-surface-variant">
+                              {item?.name || 'Item desconhecido'} x{mat.quantity}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

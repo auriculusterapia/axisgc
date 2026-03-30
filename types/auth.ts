@@ -59,7 +59,8 @@ export const ALL_PERMISSIONS: Permission[] = [
     label: 'Mapa Auricular',
     sub: [
       { id: 'auricular:view', label: 'Visualizar Mapas' },
-      { id: 'auricular:edit', label: 'Marcar Pontos' }
+      { id: 'auricular:edit', label: 'Marcar Pontos' },
+      { id: 'auricular:delete', label: 'Limpar/Excluir Mapa' }
     ]
   },
   { 
@@ -78,7 +79,8 @@ export const ALL_PERMISSIONS: Permission[] = [
     sub: [
       { id: 'financial:view', label: 'Visualizar Fluxo' },
       { id: 'financial:create', label: 'Lançar Receita/Despesa' },
-      { id: 'financial:reports', label: 'Gerar Relatórios' }
+      { id: 'financial:reports', label: 'Gerar Relatórios' },
+      { id: 'financial:delete', label: 'Excluir Transações' }
     ]
   },
   { 
@@ -108,7 +110,7 @@ export const ALL_PERMISSIONS: Permission[] = [
       { id: 'settings:profile', label: 'Meu Perfil' },
       { id: 'settings:clinic', label: 'Dados da Clínica' },
       { id: 'settings:users', label: 'Gestão de Usuários' },
-      { id: 'settings:backup', label: 'Backup e Restauração' }
+      { id: 'settings:delete', label: 'Excluir Dados Sensíveis' }
     ]
   },
 ];

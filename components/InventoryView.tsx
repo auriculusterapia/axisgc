@@ -83,6 +83,10 @@ export default function InventoryView({
     notes: ''
   });
 
+  const canCreate = user?.permissions.includes('inventory:create') || user?.role === 'ADMIN';
+  const canEdit = user?.permissions.includes('inventory:edit') || user?.role === 'ADMIN';
+  const canDelete = user?.permissions.includes('inventory:delete') || user?.role === 'ADMIN';
+
   const lowStockItems = items.filter(item => item.quantity <= item.min_quantity);
 
   const handleOpenItemModal = (item?: InventoryItem) => {
@@ -176,12 +180,14 @@ export default function InventoryView({
           <h2 className="text-4xl font-bold font-headline text-on-surface">Controle de Estoque</h2>
           <p className="text-on-surface-variant text-lg mt-2 font-medium">Cadastre produtos e gerencie o fluxo de entrada e saída.</p>
         </div>
-        <button 
-          onClick={() => handleOpenItemModal()}
-          className="px-8 py-4 rounded-2xl text-sm font-bold bg-primary text-white shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
-        >
-          <Plus size={20} /> Cadastrar Produto
-        </button>
+        {canCreate && (
+          <button 
+            onClick={() => handleOpenItemModal()}
+            className="px-8 py-4 rounded-2xl text-sm font-bold bg-primary text-white shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3"
+          >
+            <Plus size={20} /> Cadastrar Produto
+          </button>
+        )}
       </section>
 
       {/* Summary Cards */}
@@ -333,13 +339,15 @@ export default function InventoryView({
                            >
                               <Edit2 size={16} />
                            </button>
-                           <button 
-                            onClick={() => handleDelete(item.id)}
-                            title="Excluir"
-                            className="p-2 rounded-lg bg-surface-container text-outline hover:text-rose-500 transition-colors"
-                           >
-                              <Trash2 size={16} />
-                           </button>
+                           {canDelete && (
+                              <button 
+                                onClick={() => handleDelete(item.id)}
+                                title="Excluir"
+                                className="p-2 rounded-lg bg-surface-container text-outline hover:text-rose-500 transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                           )}
                         </div>
                       </td>
                     </tr>

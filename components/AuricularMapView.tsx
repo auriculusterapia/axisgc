@@ -35,6 +35,8 @@ export default function AuricularMapView({ user }: { user?: User | null }) {
     );
   };
 
+  const canDelete = user?.permissions.includes('auricular:delete') || user?.role === 'ADMIN';
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left Panel: Interactive Map */}
@@ -56,12 +58,14 @@ export default function AuricularMapView({ user }: { user?: User | null }) {
             <button className="flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-white text-on-surface-variant text-sm font-bold shadow-sm hover:bg-surface-container-high transition-all">
               <Maximize2 size={16} /> Zoom
             </button>
-            <button 
-              onClick={() => setSelectedPoints([])}
-              className="flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-white text-on-surface-variant text-sm font-bold shadow-sm hover:bg-surface-container-high transition-all"
-            >
-              <RotateCcw size={16} /> Redefinir
-            </button>
+            {canDelete && (
+              <button 
+                onClick={() => setSelectedPoints([])}
+                className="flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-white text-on-surface-variant text-sm font-bold shadow-sm hover:bg-surface-container-high transition-all"
+              >
+                <RotateCcw size={16} /> Redefinir
+              </button>
+            )}
           </div>
         </div>
 
@@ -196,12 +200,14 @@ export default function AuricularMapView({ user }: { user?: User | null }) {
           <button className="w-full bg-primary hover:bg-primary-container text-white py-5 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-xl shadow-primary/20">
             <Save size={20} /> Confirmar Pontos da Sessão
           </button>
-          <button 
-            onClick={() => setSelectedPoints([])}
-            className="w-full bg-white text-on-surface-variant py-4 rounded-2xl font-bold text-sm hover:bg-surface-container-high transition-all border border-outline-variant/10"
-          >
-            Descartar e Redefinir
-          </button>
+          {canDelete && (
+            <button 
+              onClick={() => setSelectedPoints([])}
+              className="w-full bg-white text-on-surface-variant py-4 rounded-2xl font-bold text-sm hover:bg-surface-container-high transition-all border border-outline-variant/10"
+            >
+              Descartar e Redefinir
+            </button>
+          )}
         </div>
       </aside>
     </div>
