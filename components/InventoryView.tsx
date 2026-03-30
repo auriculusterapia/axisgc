@@ -27,6 +27,8 @@ interface InventoryItem {
   min_quantity: number;
   unit: string;
   category: string;
+  expiry_date?: string;
+  unit_cost?: number;
   color?: string; // Client-only
 }
 
@@ -68,7 +70,9 @@ export default function InventoryView({
     quantity: 0,
     min_quantity: 0,
     unit: 'Unidade',
-    category: 'Descartáveis'
+    category: 'Descartáveis',
+    expiry_date: '',
+    unit_cost: 0
   });
 
   // Form State - Transaction
@@ -90,7 +94,9 @@ export default function InventoryView({
         quantity: item.quantity,
         min_quantity: item.min_quantity,
         unit: item.unit,
-        category: item.category || 'Outros'
+        category: item.category || 'Outros',
+        expiry_date: item.expiry_date || '',
+        unit_cost: item.unit_cost || 0
       });
     } else {
       setEditingItem(null);
@@ -100,7 +106,9 @@ export default function InventoryView({
         quantity: 0,
         min_quantity: 5,
         unit: 'Unidade',
-        category: 'Descartáveis'
+        category: 'Descartáveis',
+        expiry_date: '',
+        unit_cost: 0
       });
     }
     setIsItemModalOpen(true);
@@ -233,6 +241,8 @@ export default function InventoryView({
               <tr className="bg-surface-container-low border-b border-outline-variant/10">
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline">Item</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline">Categoria</th>
+                <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-right">Custo Un.</th>
+                <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-right">Validade</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-right">Estoque</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-center">Status</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-right">Ações</th>
@@ -261,6 +271,29 @@ export default function InventoryView({
                       </td>
                       <td className="py-4 px-6 text-sm font-medium text-on-surface-variant">
                         {item.category}
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <span className="text-sm font-bold text-on-surface">
+                          {item.unit_cost ? `R$ ${item.unit_cost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        {item.expiry_date ? (
+                          <div className="flex flex-col items-end">
+                            <span className={`text-sm font-bold ${
+                              new Date(item.expiry_date) < new Date() ? 'text-rose-600' :
+                              new Date(item.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) ? 'text-amber-600' :
+                              'text-on-surface'
+                            }`}>
+                              {new Date(item.expiry_date).toLocaleDateString('pt-BR')}
+                            </span>
+                            {new Date(item.expiry_date) < new Date() && (
+                              <span className="text-[10px] font-bold text-rose-500 uppercase">Vencido</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-outline">-</span>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-right">
                         <span className="text-xl font-bold font-headline">{item.quantity}</span>
@@ -382,6 +415,30 @@ export default function InventoryView({
                       onChange={e => setItemFormData({...itemFormData, unit: e.target.value})}
                       className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
                       placeholder="Ex: Unidade, Caixa, Pacote"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Data de Validade</label>
+                    <input 
+                      type="date" 
+                      value={itemFormData.expiry_date}
+                      onChange={e => setItemFormData({...itemFormData, expiry_date: e.target.value})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Custo por Unidade (R$)</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      step="0.01"
+                      value={itemFormData.unit_cost}
+                      onChange={e => setItemFormData({...itemFormData, unit_cost: parseFloat(e.target.value)})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                      placeholder="Opcional"
                     />
                   </div>
                 </div>

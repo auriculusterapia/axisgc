@@ -617,6 +617,8 @@ export default function Home() {
         min_quantity: data.min_quantity,
         unit: data.unit,
         category: data.category,
+        expiry_date: data.expiry_date || null,
+        unit_cost: data.unit_cost || 0,
         updated_at: new Date().toISOString()
       };
 
