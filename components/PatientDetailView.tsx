@@ -458,7 +458,12 @@ export default function PatientDetailView({
                         <Clock size={24} />
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold text-outline-variant uppercase tracking-widest leading-none mb-1">Especialidade</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-[10px] font-bold text-outline-variant uppercase tracking-widest leading-none">Especialidade</p>
+                          {consultation.is_unscheduled && (
+                            <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[8px] font-black rounded-md uppercase tracking-tighter">Extra</span>
+                          )}
+                        </div>
                         <p className="text-sm font-bold text-on-surface">{consultation.type || 'Não informada'}</p>
                         <p className="text-xs text-on-surface-variant font-medium">
                           {start.toLocaleDateString('pt-BR')} • {start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às {end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}

@@ -1,7 +1,25 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Play, Square, Check, Plus, Minus, Package } from 'lucide-react';
+import { 
+  X, 
+  Clock, 
+  MapPin, 
+  FileText, 
+  Trash2, 
+  Save, 
+  Plus, 
+  Check, 
+  TrendingUp, 
+  Stethoscope, 
+  Clipboard, 
+  Activity,
+  AlertCircle,
+  Play, 
+  Square, 
+  Minus, 
+  Package 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ConsultationModalProps {
@@ -12,6 +30,9 @@ interface ConsultationModalProps {
   activeConsultation?: any;
   editingConsultation?: any;
   inventoryItems: any[];
+  specialties?: any[];
+  isUnscheduledCandidate?: boolean;
+  requireExtraConsultationConfirm?: boolean;
 }
 
 type ConsultationStatus = 'idle' | 'running' | 'finished';
@@ -23,7 +44,10 @@ export default function ConsultationModal({
   patient,
   activeConsultation,
   editingConsultation,
-  inventoryItems
+  inventoryItems,
+  specialties = [],
+  isUnscheduledCandidate = false,
+  requireExtraConsultationConfirm = true
 }: ConsultationModalProps) {
   const [status, setStatus] = useState<ConsultationStatus>(() => {
     if (editingConsultation) return 'finished';
@@ -34,8 +58,10 @@ export default function ConsultationModal({
   const [startTime, setStartTime] = useState(editingConsultation?.startTime || activeConsultation?.startTime || null);
   const [endTime, setEndTime] = useState(editingConsultation?.endTime || '');
   const [notes, setNotes] = useState(editingConsultation?.notes || activeConsultation?.notes || '');
-  const [specialty, setSpecialty] = useState(editingConsultation?.type || activeConsultation?.type || 'Auriculoterapia');
+  const [specialty, setSpecialty] = useState(editingConsultation?.type || activeConsultation?.type || (specialties.length > 0 ? specialties[0].name : 'Auriculoterapia'));
   const [usedMaterials, setUsedMaterials] = useState<any[]>(editingConsultation?.materials_used || []);
+  const [hasConfirmedExtra, setHasConfirmedExtra] = useState(false);
+  const [showExtraConfirmUI, setShowExtraConfirmUI] = useState(false);
   
   const [elapsedTime, setElapsedTime] = useState(() => {
     if (editingConsultation && editingConsultation.startTime && editingConsultation.endTime) {
@@ -71,6 +97,21 @@ export default function ConsultationModal({
   };
 
   const handleStart = () => {
+    if (isUnscheduledCandidate && requireExtraConsultationConfirm && !hasConfirmedExtra) {
+      setShowExtraConfirmUI(true);
+      return;
+    }
+    const now = new Date().toISOString();
+    setStartTime(now);
+    setStatus('running');
+    setElapsedTime(0);
+  };
+
+  const handleConfirmExtra = () => {
+    setHasConfirmedExtra(true);
+    setShowExtraConfirmUI(false);
+    
+    // Start consultation immediately after confirmation
     const now = new Date().toISOString();
     setStartTime(now);
     setStatus('running');
@@ -94,7 +135,8 @@ export default function ConsultationModal({
       type: specialty,
       materials_used: usedMaterials,
       patientId: patient.id,
-      id: editingConsultation?.id
+      id: editingConsultation?.id,
+      is_unscheduled: isUnscheduledCandidate
     });
     
     onClose();
@@ -190,6 +232,16 @@ export default function ConsultationModal({
                   {status === 'idle' && (
                     <p className="text-[10px] text-outline-variant mt-4 font-medium italic">Clique no botão abaixo para iniciar o atendimento.</p>
                   )}
+                  
+                  {isUnscheduledCandidate && status === 'idle' && (
+                    <div className="mt-4 p-4 bg-rose-50 rounded-2xl border border-rose-100 flex items-start gap-3">
+                      <AlertCircle size={18} className="text-rose-500 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-rose-700 uppercase tracking-widest">Consulta Extra</p>
+                        <p className="text-[10px] text-rose-600 font-medium">Este paciente não possui agendamento para hoje.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -200,10 +252,18 @@ export default function ConsultationModal({
                       onChange={e => setSpecialty(e.target.value)}
                       className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none transition-all"
                     >
-                      <option value="Auriculoterapia">Auriculoterapia</option>
-                      <option value="Acupuntura Sistêmica">Acupuntura Sistêmica</option>
-                      <option value="Avaliação Inicial">Avaliação Inicial</option>
-                      <option value="Retorno">Retorno</option>
+                      {specialties.length > 0 ? (
+                        specialties.map(s => (
+                          <option key={s.id} value={s.name}>{s.name}</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="Auriculoterapia">Auriculoterapia</option>
+                          <option value="Acupuntura Sistêmica">Acupuntura Sistêmica</option>
+                          <option value="Avaliação Inicial">Avaliação Inicial</option>
+                          <option value="Retorno">Retorno</option>
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -314,6 +374,69 @@ export default function ConsultationModal({
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Extra Consultation Confirmation Modal */}
+      <AnimatePresence>
+        {showExtraConfirmUI && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowExtraConfirmUI(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-8 space-y-6"
+            >
+              <div className="w-20 h-20 rounded-3xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto">
+                <AlertCircle size={40} />
+              </div>
+              
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl font-bold font-headline text-on-surface">Consulta Extra</h3>
+                <p className="text-on-surface-variant font-medium">
+                  Este paciente não possui um agendamento prévio para hoje no sistema.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-3 p-5 bg-surface-container-low rounded-2xl border border-outline-variant/10 cursor-pointer hover:bg-surface-container-high transition-all group">
+                <div className="pt-0.5">
+                  <input 
+                    type="checkbox" 
+                    checked={hasConfirmedExtra}
+                    onChange={e => setHasConfirmedExtra(e.target.checked)}
+                    className="w-5 h-5 rounded-lg border-2 border-outline-variant text-primary focus:ring-primary/20 transition-all cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">Confirmar atendimento não agendado</p>
+                  <p className="text-[10px] text-outline-variant font-medium mt-1 uppercase tracking-widest">Isso será registrado nos relatórios de produtividade.</p>
+                </div>
+              </label>
+
+              <div className="flex gap-4 pt-2">
+                <button 
+                  onClick={() => setShowExtraConfirmUI(false)}
+                  className="flex-1 py-4 rounded-2xl border border-outline-variant/20 font-bold text-outline hover:bg-surface-container-low transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleConfirmExtra}
+                  disabled={!hasConfirmedExtra}
+                  className="flex-[2] py-4 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+                >
+                  Iniciar Atendimento
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

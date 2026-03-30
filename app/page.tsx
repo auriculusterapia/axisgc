@@ -98,6 +98,42 @@ export default function Home() {
   // Inventory Alert
   const [isLowStockAlertOpen, setIsLowStockAlertOpen] = useState(false);
   const [hasDismissedLowStockAlert, setHasDismissedLowStockAlert] = useState(false);
+  
+  const [specialties, setSpecialties] = useState<any[]>([]);
+  const [requireExtraConsultationConfirm, setRequireExtraConsultationConfirm] = useState(true);
+  const [isUnscheduledCandidate, setIsUnscheduledCandidate] = useState(false);
+
+  useEffect(() => {
+    const loadSpecialties = () => {
+      const saved = localStorage.getItem('axis_specialties');
+      if (saved) {
+        setSpecialties(JSON.parse(saved));
+      } else {
+        const defaults = [
+          { id: '1', name: 'Auriculoterapia' },
+          { id: '2', name: 'Acupuntura Sistêmica' },
+          { id: '3', name: 'Avaliação Inicial' },
+          { id: '4', name: 'Retorno' }
+        ];
+        setSpecialties(defaults);
+        localStorage.setItem('axis_specialties', JSON.stringify(defaults));
+      }
+    };
+
+    loadSpecialties();
+    
+    // Load extra consultation confirm setting
+    const savedConfirmSetting = localStorage.getItem('axis_confirm_extra_consultation');
+    setRequireExtraConsultationConfirm(savedConfirmSetting !== null ? JSON.parse(savedConfirmSetting) : true);
+    
+    // Listen for storage changes to sync across components (like SettingsView updating it)
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'axis_specialties') loadSpecialties();
+      if (e.key === 'axis_confirm_extra_consultation' && e.newValue !== null) {
+        setRequireExtraConsultationConfirm(JSON.parse(e.newValue));
+      }
+    });
+  }, [activeView]);
 
   useEffect(() => {
     if (user) {
@@ -777,6 +813,15 @@ export default function Home() {
               setIsPatientModalOpen(true);
             }}
             onStartConsultation={() => {
+              // DETECT: Is there an appointment for this patient today?
+              const todayStr = new Date().toISOString().split('T')[0];
+              const hasTodayAppointment = appointments.some(app => 
+                app.patientId === selectedPatient?.id && 
+                app.date === todayStr && 
+                app.status === 'scheduled'
+              );
+              
+              setIsUnscheduledCandidate(!hasTodayAppointment);
               setEditingConsultation(null);
               setIsConsultationModalOpen(true);
             }}
@@ -922,6 +967,10 @@ export default function Home() {
           setIsConsultationModalOpen(false);
           setEditingConsultation(null);
         }}
+        inventoryItems={inventoryItems}
+        specialties={specialties}
+        isUnscheduledCandidate={isUnscheduledCandidate}
+        requireExtraConsultationConfirm={requireExtraConsultationConfirm}
         onSave={async (data) => {
           if (!supabase) return;
           try {
@@ -934,6 +983,7 @@ export default function Home() {
               notes: data.notes,
               main_complaint: data.type,
               materials_used: data.materials_used || [],
+              is_unscheduled: data.is_unscheduled,
               updated_at: new Date().toISOString()
             };
 
@@ -1034,7 +1084,6 @@ export default function Home() {
           }
         }}
         patient={selectedPatient}
-        inventoryItems={inventoryItems}
         editingConsultation={editingConsultation}
       />
       <ConfirmationModal 

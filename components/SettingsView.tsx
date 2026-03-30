@@ -27,7 +27,9 @@ import {
   Edit2,
   Stethoscope,
   Users,
-  FileText
+  FileText,
+  Activity,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, UserRole, ROLE_LABELS, ALL_PERMISSIONS, ROLE_PERMISSIONS } from '@/types/auth';
@@ -51,6 +53,11 @@ interface ConsultationType {
   id: string;
   name: string;
   price: number;
+}
+
+interface Specialty {
+  id: string;
+  name: string;
 }
 
 interface SettingsViewProps {
@@ -103,6 +110,7 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
   const [isDevicesModalOpen, setIsDevicesModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
+  const [isSpecialtiesModalOpen, setIsSpecialtiesModalOpen] = useState(false);
   
   const [auditEnabled, setAuditEnabled] = useState(true);
   const [isAuditingLoading, setIsAuditingLoading] = useState(true);
@@ -153,6 +161,36 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
   const [language, setLanguage] = useState('Português (Brasil)');
   const [currency, setCurrency] = useState('BRL (R$)');
 
+  const [confirmExtraConsultation, setConfirmExtraConsultation] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('axis_confirm_extra_consultation');
+      return saved !== null ? JSON.parse(saved) : true;
+    }
+    return true;
+  });
+
+  const [specialties, setSpecialties] = useState<Specialty[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('axis_specialties');
+      return saved ? JSON.parse(saved) : [
+        { id: '1', name: 'Auriculoterapia' },
+        { id: '2', name: 'Acupuntura Sistêmica' },
+        { id: '3', name: 'Avaliação Inicial' },
+        { id: '4', name: 'Retorno' }
+      ];
+    }
+    return [
+      { id: '1', name: 'Auriculoterapia' },
+      { id: '2', name: 'Acupuntura Sistêmica' },
+      { id: '3', name: 'Avaliação Inicial' },
+      { id: '4', name: 'Retorno' }
+    ];
+  });
+
+  const [editingSpecialty, setEditingSpecialty] = useState<Specialty | null>(null);
+  const [specialtyFormData, setSpecialtyFormData] = useState({ name: '' });
+  const [specialtyToDelete, setSpecialtyToDelete] = useState<Specialty | null>(null);
+
   useEffect(() => {
     localStorage.setItem('auriculocare_profile', JSON.stringify(profile));
   }, [profile]);
@@ -164,6 +202,14 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
   useEffect(() => {
     localStorage.setItem('auriculocare_consultation_types', JSON.stringify(consultationTypes));
   }, [consultationTypes]);
+
+  useEffect(() => {
+    localStorage.setItem('axis_specialties', JSON.stringify(specialties));
+  }, [specialties]);
+
+  useEffect(() => {
+    localStorage.setItem('axis_confirm_extra_consultation', JSON.stringify(confirmExtraConsultation));
+  }, [confirmExtraConsultation]);
 
   const handleExportData = () => {
     const data = {
@@ -241,6 +287,14 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
           bg: 'bg-indigo-50',
           onClick: () => setIsServicesModalOpen(true)
         },
+        { 
+          icon: Activity, 
+          label: 'Especialidades', 
+          description: 'Gerencie as especialidades disponíveis para atendimento.', 
+          color: 'text-orange-500', 
+          bg: 'bg-orange-50',
+          onClick: () => setIsSpecialtiesModalOpen(true)
+        },
       ]
     },
     {
@@ -290,6 +344,14 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
           color: 'text-cyan-500', 
           bg: 'bg-cyan-50',
           onClick: () => setIsLanguageModalOpen(true)
+        },
+        { 
+          icon: AlertCircle, 
+          label: 'Confirmar Consultas Extras', 
+          description: confirmExtraConsultation ? 'Ativado (Aviso Prévio)' : 'Desativado (Início Direto)', 
+          color: 'text-rose-500', 
+          bg: 'bg-rose-50',
+          onClick: () => setConfirmExtraConsultation(!confirmExtraConsultation)
         },
       ]
     },
@@ -953,6 +1015,131 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
         )}
       </AnimatePresence>
 
+      {/* Specialties Modal */}
+      <AnimatePresence>
+        {isSpecialtiesModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setIsSpecialtiesModalOpen(false);
+                setEditingSpecialty(null);
+                setSpecialtyFormData({ name: '' });
+              }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 border-b border-outline-variant/10 flex justify-between items-center text-on-surface">
+                <h3 className="text-2xl font-bold font-headline">Gerenciar Especialidades</h3>
+                <button 
+                  onClick={() => {
+                    setIsSpecialtiesModalOpen(false);
+                    setEditingSpecialty(null);
+                    setSpecialtyFormData({ name: '' });
+                  }} 
+                  className="p-2 hover:bg-surface-container-low rounded-full transition-all"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-8 overflow-y-auto space-y-8 custom-scrollbar">
+                {/* Add/Edit Form */}
+                <div className="bg-surface-container-low p-6 rounded-[2rem] space-y-4">
+                  <h4 className="text-sm font-bold text-outline uppercase tracking-widest">
+                    {editingSpecialty ? 'Editar Especialidade' : 'Nova Especialidade'}
+                  </h4>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest ml-2">Nome da Especialidade</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Florais de Bach"
+                      value={specialtyFormData.name}
+                      onChange={e => setSpecialtyFormData({ name: e.target.value })}
+                      className="w-full px-5 py-3 bg-white rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => {
+                        if (!specialtyFormData.name) return;
+                        if (editingSpecialty) {
+                          setSpecialties(specialties.map(s => s.id === editingSpecialty.id ? { ...s, name: specialtyFormData.name } : s));
+                          setEditingSpecialty(null);
+                        } else {
+                          setSpecialties([...specialties, { id: `spec-${Date.now()}`, name: specialtyFormData.name }]);
+                        }
+                        setSpecialtyFormData({ name: '' });
+                      }}
+                      className="flex-1 py-3 rounded-xl bg-primary text-white font-bold text-sm shadow-lg shadow-primary/10 hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+                    >
+                      {editingSpecialty ? <Check size={18} /> : <Plus size={18} />}
+                      {editingSpecialty ? 'Atualizar' : 'Adicionar'}
+                    </button>
+                    {editingSpecialty && (
+                      <button 
+                        onClick={() => {
+                          setEditingSpecialty(null);
+                          setSpecialtyFormData({ name: '' });
+                        }}
+                        className="px-6 py-3 rounded-xl bg-surface-container-high text-on-surface font-bold text-sm hover:bg-surface-container-highest transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* List */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold text-outline uppercase tracking-widest ml-2">Especialidades Ativas</h4>
+                  <div className="space-y-3">
+                    {specialties.map((spec) => (
+                      <div key={spec.id} className="flex items-center justify-between p-5 bg-white border border-outline-variant/10 rounded-2xl hover:shadow-md transition-all group">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center">
+                            <Activity size={20} />
+                          </div>
+                          <p className="font-bold text-on-surface">{spec.name}</p>
+                        </div>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={() => {
+                              setEditingSpecialty(spec);
+                              setSpecialtyFormData({ name: spec.name });
+                            }}
+                            className="p-2 text-outline hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          {canDelete && (
+                            <button 
+                              onClick={() => {
+                                setSpecialtyToDelete(spec);
+                              }}
+                              className="p-2 text-outline hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <ConfirmationModal
         isOpen={!!serviceToDelete}
         onClose={() => setServiceToDelete(null)}
@@ -966,6 +1153,21 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
         message={`Tem certeza que deseja excluir o serviço "${serviceToDelete?.name}"?`}
         confirmText="Excluir"
         cancelText="Cancelar"
+        type="danger"
+      />
+
+      <ConfirmationModal
+        isOpen={!!specialtyToDelete}
+        onClose={() => setSpecialtyToDelete(null)}
+        onConfirm={() => {
+          if (specialtyToDelete) {
+            setSpecialties(specialties.filter(s => s.id !== specialtyToDelete.id));
+            setSpecialtyToDelete(null);
+          }
+        }}
+        title="Excluir Especialidade"
+        message={`Tem certeza que deseja excluir a especialidade "${specialtyToDelete?.name}"? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
         type="danger"
       />
     </div>
