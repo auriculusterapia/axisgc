@@ -23,12 +23,14 @@ import {
   Printer,
   FileText,
   X,
-  AlertCircle
+  AlertCircle,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { User } from '@/types/auth';
+import ConfirmationModal from './ConfirmationModal';
 
 interface PatientDetailViewProps {
   patient: any;
@@ -42,6 +44,8 @@ interface PatientDetailViewProps {
   inventoryItems: any[];
   packages?: any[];
   onSavePackage?: (data: any) => Promise<void>;
+  onUpdatePackage?: (id: string, data: any) => Promise<void>;
+  onDeletePackage?: (id: string) => Promise<void>;
   user?: User | null;
 }
 
@@ -57,17 +61,23 @@ export default function PatientDetailView({
   inventoryItems,
   packages = [],
   onSavePackage,
+  onUpdatePackage,
+  onDeletePackage,
   user
 }: PatientDetailViewProps) {
   const [notes, setNotes] = useState('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
   const [isSavingPackage, setIsSavingPackage] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [packageToDeleteId, setPackageToDeleteId] = useState<string | null>(null);
+  const [isEditingPackage, setIsEditingPackage] = useState(false);
   const [activeTab, setActiveTab] = useState<'geral' | 'historico' | 'pacotes'>('geral');
 
   const [packageFormData, setPackageFormData] = useState({
     total_sessions: 10,
     price: 1200,
+    status: 'active',
     date: new Date().toISOString().split('T')[0]
   });
 
@@ -355,9 +365,38 @@ export default function PatientDetailView({
                       <p className="text-[10px] font-bold text-outline-variant uppercase">Data da Venda</p>
                       <p className="font-bold">{new Date(pkg.created_at).toLocaleDateString('pt-BR')}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold text-outline-variant uppercase">Status</p>
-                      <span className={`px-2 py-0.5 text-[8px] font-bold rounded-md ${pkg.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-container-high text-outline'}`}>{pkg.status === 'active' ? 'Ativo' : 'Concluído'}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-outline-variant uppercase">Status</p>
+                        <span className={`px-2 py-0.5 text-[8px] font-bold rounded-md ${pkg.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-container-high text-outline'}`}>{pkg.status === 'active' ? 'Ativo' : 'Concluído'}</span>
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button 
+                          onClick={() => {
+                            setPackageFormData({
+                              total_sessions: pkg.total_sessions,
+                              price: pkg.price,
+                              status: pkg.status,
+                              date: new Date(pkg.created_at).toISOString().split('T')[0]
+                            });
+                            setIsEditingPackage(true);
+                            setPackageToDeleteId(pkg.id); // Reusing this for current edit ID
+                            setIsPackageModalOpen(true);
+                          }}
+                          className="p-2 hover:bg-surface-container-low rounded-xl text-outline hover:text-primary transition-all"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setPackageToDeleteId(pkg.id);
+                            setIsDeleteConfirmOpen(true);
+                          }}
+                          className="p-2 hover:bg-surface-container-low rounded-xl text-outline hover:text-rose-500 transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -377,38 +416,93 @@ export default function PatientDetailView({
         )}
       </AnimatePresence>
 
+      {/* Package Modal (Sell/Edit) */}
       <AnimatePresence>
         {isPackageModalOpen && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPackageModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl">
-              <h3 className="text-2xl font-bold mb-6">Novo Pacote</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-outline ml-4">Sessões</label>
-                  <input type="number" value={packageFormData.total_sessions} onChange={(e) => setPackageFormData({...packageFormData, total_sessions: parseInt(e.target.value) || 0})} className="w-full bg-surface-container-low rounded-2xl p-4 border-none font-bold" />
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPackageModalOpen(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden">
+              <div className="px-8 py-6 bg-primary text-white flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <Sparkles size={24} />
+                  <h3 className="text-xl font-headline font-bold">{isEditingPackage ? 'Editar Pacote' : 'Venda de Pacote'}</h3>
                 </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-outline ml-4">Valor Total (R$)</label>
-                  <input type="number" value={packageFormData.price} onChange={(e) => setPackageFormData({...packageFormData, price: parseFloat(e.target.value) || 0})} className="w-full bg-surface-container-low rounded-2xl p-4 border-none font-bold text-primary" />
+                <button onClick={() => setIsPackageModalOpen(false)} className="p-1.5 hover:bg-white/20 rounded-full transition-all"><X size={22} /></button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Sessões Totais</label>
+                    <input type="number" value={packageFormData.total_sessions} onChange={e => setPackageFormData({...packageFormData, total_sessions: parseInt(e.target.value) || 0})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-bold text-lg" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Valor do Pacote (R$)</label>
+                    <input type="number" value={packageFormData.price} onChange={e => setPackageFormData({...packageFormData, price: parseFloat(e.target.value) || 0})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-bold text-lg" />
+                  </div>
                 </div>
-                <button 
-                  onClick={async () => {
-                    setIsSavingPackage(true);
-                    if (onSavePackage) await onSavePackage({ patientId: patient.id, ...packageFormData, status: 'active', used_sessions: 0 });
-                    setIsSavingPackage(false);
-                    setIsPackageModalOpen(false);
-                  }}
-                  disabled={isSavingPackage}
-                  className="w-full py-5 bg-primary text-white font-bold rounded-[2rem] shadow-xl hover:scale-105 transition-all mt-6"
-                >
-                  {isSavingPackage ? "Salvando..." : "Confirmar Venda"}
-                </button>
+
+                {isEditingPackage && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Status</label>
+                    <div className="flex gap-2">
+                       {['active', 'completed'].map(s => (
+                         <button key={s} onClick={() => setPackageFormData({...packageFormData, status: s})}
+                           className={`flex-1 py-3 rounded-xl border font-bold text-xs transition-all ${packageFormData.status === s ? 'bg-primary text-white border-primary' : 'bg-surface-container-low text-outline border-outline-variant/10 hover:border-primary/40'}`}>
+                           {s === 'active' ? 'Ativo' : 'Concluído'}
+                         </button>
+                       ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => setIsPackageModalOpen(false)} className="flex-1 py-4 rounded-2xl border border-outline-variant/20 font-bold text-outline hover:bg-surface-container-low transition-all">Cancelar</button>
+                  <button 
+                    disabled={isSavingPackage}
+                    onClick={async () => {
+                      setIsSavingPackage(true);
+                      try {
+                        if (isEditingPackage && packageToDeleteId) {
+                          await onUpdatePackage?.(packageToDeleteId, packageFormData);
+                        } else {
+                          await onSavePackage?.({ ...packageFormData, patientId: patient.id });
+                        }
+                        setIsPackageModalOpen(false);
+                        setIsEditingPackage(false);
+                      } finally {
+                        setIsSavingPackage(false);
+                      }
+                    }}
+                    className="flex-[2] py-4 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    {isSavingPackage ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Check size={20} /> {isEditingPackage ? 'Salvar Alterações' : 'Concluir Venda'}</>}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal 
+        isOpen={isDeleteConfirmOpen} 
+        onClose={() => {
+          setIsDeleteConfirmOpen(false);
+          setPackageToDeleteId(null);
+        }}
+        onConfirm={async () => {
+          if (packageToDeleteId) {
+            await onDeletePackage?.(packageToDeleteId);
+            setPackageToDeleteId(null);
+          }
+        }}
+        title="Excluir Pacote?"
+        message="Esta ação irá remover permanentemente o pacote e seus lançamentos financeiros pendentes. Sessões já realizadas não serão afetadas."
+        confirmText="Sim, Excluir"
+        type="danger"
+      />
     </div>
   );
 }

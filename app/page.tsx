@@ -790,7 +790,7 @@ export default function Home() {
         updated_at: new Date().toISOString()
       };
 
-      const { data: newApp, error: appError } = await supabase
+      const { data: newApp, error: appError } = await (supabase as any)
         .from('appointments')
         .insert([financialAppointment])
         .select()
@@ -805,6 +805,12 @@ export default function Home() {
         setPackages(prev => [newPackage, ...prev]);
         if (newApp) setAppointments(prev => [newApp, ...prev]);
         
+        await logAction({ 
+          action: 'CREATE', 
+          entityType: 'FINANCIAL', 
+          details: { summary: `Venda de Pacote: ${data.total_sessions} sessões para ${selectedPatient?.name}`, id: newPackage.id } 
+        });
+
         addNotification(
           'Pacote Vendido', 
           `Pacote registrado. Confirme o recebimento de R$ ${data.price.toLocaleString('pt-BR')} no Financeiro.`, 
@@ -815,6 +821,75 @@ export default function Home() {
     } catch (error: any) {
       console.error('Error saving package:', error);
       addNotification('Erro ao salvar pacote', `Ocorreu um erro: ${error.message || 'Verifique a conexão.'}`, 'error');
+    }
+  };
+
+  const handleUpdatePackage = async (id: string, data: any) => {
+    if (!supabase) return;
+    try {
+      const { error } = await (supabase as any)
+        .from('patient_packages')
+        .update({
+          total_sessions: data.total_sessions,
+          price: data.price,
+          status: data.status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await logAction({ 
+        action: 'UPDATE', 
+        entityType: 'FINANCIAL', 
+        details: { summary: `Pacote atualizado: ${id}`, id } 
+      });
+
+      addNotification('Pacote Atualizado', 'As alterações foram salvas com sucesso.', 'success');
+      fetchData();
+    } catch (error: any) {
+      console.error('Error updating package:', error);
+      addNotification('Erro ao atualizar pacote', error.message, 'error');
+    }
+  };
+
+  const handleDeletePackage = async (id: string) => {
+    if (!supabase) return;
+    try {
+      // 1. Check for pending financial appointment associated with this package
+      // The notes field contains "Pacote ID: {id}"
+      const { data: pendingApps } = await (supabase as any)
+        .from('appointments')
+        .select('*')
+        .eq('payment_status', 'pendente')
+        .like('notes', `%Pacote ID: ${id}%`);
+
+      if (pendingApps && pendingApps.length > 0) {
+        // Delete pending financial entries
+        for (const app of pendingApps) {
+          await (supabase as any).from('appointments').delete().eq('id', app.id);
+        }
+      }
+
+      // 2. Delete the package
+      const { error } = await (supabase as any)
+        .from('patient_packages')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await logAction({ 
+        action: 'DELETE', 
+        entityType: 'FINANCIAL', 
+        details: { summary: `Pacote excluído: ${id}`, id } 
+      });
+
+      addNotification('Pacote Excluído', 'O pacote e seus lançamentos pendentes foram removidos.', 'info');
+      fetchData();
+    } catch (error: any) {
+      console.error('Error deleting package:', error);
+      addNotification('Erro ao excluir pacote', error.message, 'error');
     }
   };
 
@@ -1018,6 +1093,8 @@ export default function Home() {
             }}
             packages={packages}
             onSavePackage={handleSavePackage}
+            onUpdatePackage={handleUpdatePackage}
+            onDeletePackage={handleDeletePackage}
           />
         );
       case 'evaluations':

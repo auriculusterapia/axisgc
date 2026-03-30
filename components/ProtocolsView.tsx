@@ -21,7 +21,8 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface Protocol {
   id: string;
-  title: string;
+  title?: string;
+  name?: string;
   description: string;
   points: string[];
   category: string;
@@ -95,9 +96,9 @@ export default function ProtocolsView({
     if (protocol) {
       setEditingProtocol(protocol);
       setFormData({
-        title: protocol.title,
-        description: protocol.description,
-        points: protocol.points.join(', '),
+        title: protocol.title || protocol.name || '',
+        description: protocol.description || '',
+        points: (protocol.points || []).join(', '),
         category: protocol.category,
         duration: protocol.duration,
         color: protocol.color
@@ -135,9 +136,13 @@ export default function ProtocolsView({
   };
 
   const filteredProtocols = protocols.filter(p => {
-    const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         p.points.some(pt => pt.toLowerCase().includes(searchTerm.toLowerCase()));
+    const title = (p.title || p.name || '').toLowerCase();
+    const description = (p.description || '').toLowerCase();
+    const search = searchTerm.toLowerCase();
+    
+    const matchesSearch = title.includes(search) || 
+                         description.includes(search) ||
+                         (p.points || []).some((pt: string) => pt.toLowerCase().includes(search));
     const matchesCategory = selectedCategory === 'Todos' || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -227,14 +232,16 @@ export default function ProtocolsView({
                 </div>
               </div>
 
-              <h3 className="text-2xl font-bold font-headline text-on-surface group-hover:text-primary transition-colors">{protocol.title}</h3>
+              <h3 className="text-2xl font-bold font-headline text-on-surface group-hover:text-primary transition-colors">
+                {protocol.title || protocol.name || 'Protocolo Sem Título'}
+              </h3>
               <p className="text-on-surface-variant text-sm mt-2 line-clamp-2 font-medium leading-relaxed">
-                {protocol.description}
+                {protocol.description || 'Sem descrição disponível.'}
               </p>
 
               <div className="mt-8 flex flex-wrap gap-2">
-                {protocol.points.map(point => (
-                  <span key={point} className="px-3 py-1 bg-surface-container-low text-on-surface-variant text-[10px] font-bold rounded-lg border border-outline-variant/10">
+                {(protocol.points || []).map((point: string, idx: number) => (
+                  <span key={idx} className="px-3 py-1 bg-surface-container-low text-on-surface-variant text-[10px] font-bold rounded-lg border border-outline-variant/10">
                     {point}
                   </span>
                 ))}
