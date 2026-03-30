@@ -94,9 +94,25 @@ export default function CalendarView({
     notes: ''
   });
 
+  const resetForm = (date?: string) => {
+    setEditingAppointment(null);
+    setNewAppointment({
+      date: date || new Date().toISOString().split('T')[0],
+      time: '09:00',
+      duration: 45,
+      type: 'follow-up',
+      status: 'scheduled',
+      patientId: '',
+      notes: ''
+    });
+  };
+
   useEffect(() => {
     if (forceOpenModal) {
-      const timer = setTimeout(() => setIsModalOpen(true), 0);
+      const timer = setTimeout(() => {
+        resetForm();
+        setIsModalOpen(true);
+      }, 0);
       return () => clearTimeout(timer);
     }
   }, [forceOpenModal]);
@@ -147,7 +163,7 @@ export default function CalendarView({
       const appointmentData = {
         ...newAppointment,
         patientName: patient?.name || 'Paciente Desconhecido',
-        price: newAppointment.price || getPriceByType(type),
+        price: (newAppointment.price !== undefined && newAppointment.price !== null) ? newAppointment.price : getPriceByType(type),
         id: editingAppointment?.id
       };
 
@@ -204,8 +220,9 @@ export default function CalendarView({
             </span>
             {canCreate && (
               <button 
-                onClick={() => {
-                  setNewAppointment({ ...newAppointment, date: dateStr });
+                onClick={(e) => {
+                  e.stopPropagation();
+                  resetForm(dateStr);
                   setIsModalOpen(true);
                 }}
                 className="opacity-0 group-hover:opacity-100 p-1 hover:bg-primary/10 text-primary rounded-md transition-all"
@@ -291,8 +308,9 @@ export default function CalendarView({
             ))}
             {canCreate && (
               <button 
-                onClick={() => {
-                  setNewAppointment({ ...newAppointment, date: dateStr });
+                onClick={(e) => {
+                  e.stopPropagation();
+                  resetForm(dateStr);
                   setIsModalOpen(true);
                 }}
                 className="w-full py-3 border-2 border-dashed border-outline-variant/20 rounded-xl text-outline hover:text-primary hover:border-primary/30 transition-all flex items-center justify-center gap-2"
@@ -348,7 +366,10 @@ export default function CalendarView({
           </div>
           {canCreate && (
             <button 
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => {
+                resetForm();
+                setIsModalOpen(true);
+              }}
               className="bg-primary text-white px-6 py-3 rounded-2xl font-bold text-sm flex items-center gap-2 hover:brightness-110 transition-all shadow-xl shadow-primary/20"
             >
               <Plus size={18} /> Novo Atendimento
@@ -391,7 +412,7 @@ export default function CalendarView({
               exit={{ opacity: 0 }}
               onClick={() => {
                 setIsModalOpen(false);
-                setEditingAppointment(null);
+                resetForm();
                 if (onModalClose) onModalClose();
               }}
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
@@ -412,7 +433,7 @@ export default function CalendarView({
                 <button 
                   onClick={() => {
                     setIsModalOpen(false);
-                    setEditingAppointment(null);
+                    resetForm();
                     if (onModalClose) onModalClose();
                   }} 
                   className="p-2 hover:bg-surface-container-low rounded-full transition-all"

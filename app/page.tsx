@@ -781,11 +781,10 @@ export default function Home() {
         time: '00:00',
         duration: 0,
         type: `Venda de Pacote - ${data.total_sessions} sessões`,
-        status: 'Confirmado',
+        status: 'scheduled',
         payment_status: 'pendente',
         price: data.price,
         notes: `Pacote ID: ${newPackage.id}`,
-        is_unscheduled: true,
         created_by: user?.id,
         updated_at: new Date().toISOString()
       };
@@ -797,7 +796,7 @@ export default function Home() {
         .single();
 
       if (appError) {
-        console.error('Error creating financial appointment for package:', appError);
+        console.error('Error creating financial appointment for package:', JSON.stringify(appError, null, 2));
         throw appError;
       }
 
