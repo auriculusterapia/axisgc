@@ -53,6 +53,7 @@ interface CalendarViewProps {
   onSaveAppointment: (data: any) => Promise<void>;
   onDeleteAppointment: (id: string) => Promise<void>;
   onOpenPatientModal?: () => void;
+  packages?: any[];
 }
 
 export default function CalendarView({ 
@@ -63,7 +64,8 @@ export default function CalendarView({
   patients,
   onSaveAppointment,
   onDeleteAppointment,
-  onOpenPatientModal
+  onOpenPatientModal,
+  packages = []
 }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
@@ -448,6 +450,53 @@ export default function CalendarView({
                     ))}
                   </select>
                 </div>
+
+                {/* Package Selection */}
+                {newAppointment.patientId && packages.filter(p => p.patient_id === newAppointment.patientId && p.status === 'active' && (p.total_sessions - p.used_sessions) > 0).length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="p-6 bg-primary/5 rounded-[2rem] border border-primary/10 space-y-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                          <Plus size={18} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-primary uppercase tracking-widest leading-none mb-1">Pacote Disponível</p>
+                          <p className="text-sm font-medium text-on-surface">Este paciente possui sessões pendentes.</p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer"
+                          checked={!!(newAppointment as any).isPackageSession}
+                          onChange={(e) => {
+                            const isChecked = e.target.checked;
+                            const patientPkg = packages.find(p => p.patient_id === newAppointment.patientId && p.status === 'active');
+                            setNewAppointment({
+                              ...newAppointment, 
+                              isPackageSession: isChecked,
+                              packageId: isChecked ? patientPkg?.id : null,
+                              price: isChecked ? 0 : getPriceByType(newAppointment.type || 'follow-up')
+                            } as any);
+                          }}
+                        />
+                        <div className="w-14 h-8 bg-outline/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                    </div>
+                    {(newAppointment as any).isPackageSession && (
+                      <div className="pt-2 border-t border-primary/10">
+                        <p className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">Aviso Financeiro</p>
+                        <p className="text-xs text-on-surface-variant font-medium mt-1">
+                          Esta consulta será registrada com **valor zero** no financeiro para evitar duplicidade com a venda do pacote.
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
 
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">

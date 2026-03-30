@@ -12,7 +12,7 @@ import autoTable from 'jspdf-autotable';
 import { User as UserType } from '@/types/auth';
 import { getClientSupabase } from '@/lib/supabase';
 
-const INCOME_CATEGORIES = ['Consulta', 'Avaliação', 'Protocolo', 'Produto', 'Outros'];
+const INCOME_CATEGORIES = ['Consulta', 'Avaliação', 'Protocolo', 'Produto', 'Pacote', 'Outros'];
 const EXPENSE_CATEGORIES = ['Aluguel', 'Materiais', 'Equipamentos', 'Marketing', 'Salários', 'Utilidades', 'Impostos', 'Outros'];
 
 interface FinancialTransaction {

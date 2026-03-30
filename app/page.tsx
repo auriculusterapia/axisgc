@@ -92,8 +92,10 @@ export default function Home() {
   const [editingConsultation, setEditingConsultation] = useState<any>(null);
   const [consultationToDelete, setConsultationToDelete] = useState<string | null>(null);
   const [editingPatient, setEditingPatient] = useState<any>(null);
-  const [patientToDelete, setPatientToDelete] = useState<any>(null);
+  const [patientToDelete, setPatientToDelete] = useState<any | null>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
+  const [isUnscheduledCandidate, setIsUnscheduledCandidate] = useState(false);
+  const [isCurrentConsultationPackage, setIsCurrentConsultationPackage] = useState(false);
   
   // Inventory Alert
   const [isLowStockAlertOpen, setIsLowStockAlertOpen] = useState(false);
@@ -101,7 +103,6 @@ export default function Home() {
   
   const [specialties, setSpecialties] = useState<any[]>([]);
   const [requireExtraConsultationConfirm, setRequireExtraConsultationConfirm] = useState(true);
-  const [isUnscheduledCandidate, setIsUnscheduledCandidate] = useState(false);
 
   // Notifications State
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(true);
@@ -113,6 +114,36 @@ export default function Home() {
     return [];
   });
   const [activeToasts, setActiveToasts] = useState<any[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
+
+  const addNotification = useCallback((title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    if (!isNotificationsEnabled) return;
+    
+    const newNotif = {
+      id: Date.now().toString(),
+      title,
+      message,
+      type,
+      time: new Date().toISOString(),
+      read: false
+    };
+    
+    setNotifications(prev => [newNotif, ...prev].slice(0, 30));
+    
+    // Add to toasts
+    setActiveToasts(prev => [...prev, newNotif]);
+    setTimeout(() => {
+      setActiveToasts(prev => prev.filter(t => t.id !== newNotif.id));
+    }, 5000);
+  }, [isNotificationsEnabled]);
+
+  const markNotificationAsRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+  
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
 
   useEffect(() => {
     const loadSpecialties = () => {
@@ -178,18 +209,20 @@ export default function Home() {
         { data: consultationsData },
         { data: evaluationsData },
         { data: protocolsData },
-        { data: inventoryData }
+        { data: inventoryData },
+        { data: packagesData }
       ] = await Promise.all([
-        supabase.from('patients').select('*').order('name'),
-        supabase.from('appointments').select('*').order('date', { ascending: false }),
-        supabase.from('consultations').select('*').order('date', { ascending: false }),
-        supabase.from('evaluations').select('*').order('date', { ascending: false }),
-        supabase.from('protocols').select('*').order('name'),
-        supabase.from('inventory_items').select('*').order('name')
+        (supabase as any).from('patients').select('*').order('name'),
+        (supabase as any).from('appointments').select('*').order('date', { ascending: false }),
+        (supabase as any).from('consultations').select('*').order('date', { ascending: false }),
+        (supabase as any).from('evaluations').select('*').order('date', { ascending: false }),
+        (supabase as any).from('protocols').select('*').order('name'),
+        (supabase as any).from('inventory_items').select('*').order('name'),
+        (supabase as any).from('patient_packages').select('*').order('date', { ascending: false })
       ]);
 
       if (patientsData) {
-        setPatients(patientsData.map(p => ({
+        setPatients((patientsData as any[]).map(p => ({
           ...p,
           maritalStatus: p.marital_status || 'Solteiro(a)',
           avatar: p.avatar_url || '',
@@ -197,7 +230,7 @@ export default function Home() {
         })));
       }
       if (appointmentsData) {
-        setAppointments(appointmentsData.map(a => ({
+        setAppointments((appointmentsData as any[]).map(a => ({
           ...a,
           patientId: a.patient_id,
           patientName: a.patient_name,
@@ -205,7 +238,7 @@ export default function Home() {
         })));
       }
       if (consultationsData) {
-        setConsultations(consultationsData.map(c => ({
+        setConsultations((consultationsData as any[]).map(c => ({
           ...c,
           patientId: c.patient_id,
           startTime: (c as any).start_time,
@@ -214,7 +247,7 @@ export default function Home() {
         })));
       }
       if (evaluationsData) {
-        setEvaluations(evaluationsData.map(e => ({
+        setEvaluations((evaluationsData as any[]).map(e => ({
           ...(e.data as any),
           id: e.id,
           patientId: e.patient_id,
@@ -222,25 +255,18 @@ export default function Home() {
         })));
       }
       if (protocolsData) {
-        setProtocols(protocolsData.map(p => ({
-          ...p,
-          title: p.name,
-          points: p.points || [],
-          duration: '20 min', // Default as it's not in schema
-          usage: 0,
-          rating: 5.0,
-          color: 'bg-emerald-500'
-        })));
+        setProtocols(protocolsData as any[]);
       }
       if (inventoryData) {
-        const mappedInventory = inventoryData.map(i => ({
-          ...i,
-          color: COLORS_ARRAY[Math.floor(Math.random() * COLORS_ARRAY.length)]
+        const mappedInventory = (inventoryData as any[]).map(item => ({
+          ...item,
+          quantity: Number(item.quantity),
+          min_quantity: Number(item.min_quantity)
         }));
         setInventoryItems(mappedInventory);
         
         // Trigger low stock notifications
-        inventoryData.filter(item => Number(item.quantity) <= Number(item.min_quantity)).forEach(item => {
+        (inventoryData as any[]).filter(item => Number(item.quantity) <= Number(item.min_quantity)).forEach(item => {
           // Only add if not already notified (simple check)
           const alreadyNotified = notifications.some(n => n.title === 'Estoque Baixo' && n.message.includes(item.name));
           if (!alreadyNotified) {
@@ -253,6 +279,9 @@ export default function Home() {
         if (lowStock.length > 0 && !hasDismissedLowStockAlert) {
           setIsLowStockAlertOpen(true);
         }
+      }
+      if (packagesData) {
+        setPackages(packagesData);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -437,35 +466,6 @@ export default function Home() {
     setIsCalendarModalOpen(true);
   };
 
-  const addNotification = useCallback((title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
-    if (!isNotificationsEnabled) return;
-    
-    const newNotif = {
-      id: Date.now().toString(),
-      title,
-      message,
-      type,
-      time: new Date().toISOString(),
-      read: false
-    };
-    
-    setNotifications(prev => [newNotif, ...prev].slice(0, 30));
-    
-    // Add to toasts
-    setActiveToasts(prev => [...prev, newNotif]);
-    setTimeout(() => {
-      setActiveToasts(prev => prev.filter(t => t.id !== newNotif.id));
-    }, 5000);
-  }, [isNotificationsEnabled]);
-
-  const markNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  };
-  
-  const clearAllNotifications = () => {
-    setNotifications([]);
-  };
-
   const handleDeletePatient = async () => {
     if (!supabase || !patientToDelete) return;
     try {
@@ -508,6 +508,8 @@ export default function Home() {
         payment_status: data.paymentStatus || 'pendente',
         price: data.price,
         notes: data.notes,
+        package_id: data.packageId || null,
+        is_package_session: data.isPackageSession || false,
         updated_at: new Date().toISOString()
       };
 
@@ -538,6 +540,29 @@ export default function Home() {
         if (newAppointment) {
           setAppointments(prev => [newAppointment, ...prev]);
           await logAction({ action: 'CREATE', entityType: 'FINANCIAL', details: { summary: `Novo Lançamento/Agendamento: ${data.patientName} (Status: ${data.paymentStatus})`, id: newAppointment.id } });
+
+          // If it's a package session, update the package usage
+          if (data.isPackageSession && data.packageId) {
+            const pkg = packages.find(p => p.id === data.packageId);
+            if (pkg) {
+              const newUsed = pkg.used_sessions + 1;
+              const { error: pkgError } = await (supabase as any)
+                .from('patient_packages')
+                .update({ 
+                  used_sessions: newUsed,
+                  status: newUsed >= pkg.total_sessions ? 'completed' : 'active'
+                })
+                .eq('id', data.packageId);
+              
+              if (pkgError) console.error('Error updating package usage:', pkgError);
+              
+              setPackages(prev => prev.map(p => p.id === data.packageId ? { 
+                ...p, 
+                used_sessions: newUsed,
+                status: newUsed >= pkg.total_sessions ? 'completed' : 'active'
+              } : p));
+            }
+          }
         }
       }
       
@@ -557,12 +582,37 @@ export default function Home() {
     if (!supabase) return;
     try {
       const appToDel = appointments.find(a => a.id === id);
+      if (!appToDel) return;
+
       const { error } = await supabase.from('appointments').delete().eq('id', id);
       if (error) throw error;
+      
       setAppointments(prev => prev.filter(a => a.id !== id));
-      if (appToDel) {
-        await logAction({ action: 'DELETE', entityType: 'APPOINTMENTS', details: { summary: `Consulta/Transação excluída: ${appToDel.patientName}`, id } });
+      
+      // If it was a package session, REVERSE the usage
+      if (appToDel.is_package_session && appToDel.package_id) {
+        const pkg = packages.find(p => p.id === appToDel.package_id);
+        if (pkg) {
+          const newUsed = Math.max(0, pkg.used_sessions - 1);
+          const { error: pkgError } = await (supabase as any)
+            .from('patient_packages')
+            .update({ 
+              used_sessions: newUsed,
+              status: 'active' // Always reset to active if we have sessions left or just deleted one
+            })
+            .eq('id', appToDel.package_id);
+          
+          if (pkgError) console.error('Error reversing package usage:', pkgError);
+          
+          setPackages(prev => prev.map(p => p.id === appToDel.package_id ? { 
+            ...p, 
+            used_sessions: newUsed,
+            status: 'active'
+          } : p));
+        }
       }
+
+      await logAction({ action: 'DELETE', entityType: 'APPOINTMENTS', details: { summary: `Consulta/Transação excluída: ${appToDel.patientName}`, id } });
     } catch (error) {
       console.error('Error deleting appointment:', error);
     }
@@ -700,6 +750,73 @@ export default function Home() {
   };
 
   const COLORS_ARRAY = ['bg-emerald-500', 'bg-indigo-500', 'bg-blue-500', 'bg-rose-500', 'bg-amber-500', 'bg-purple-500'];
+
+  const handleSavePackage = async (data: any) => {
+    if (!supabase) return;
+    try {
+      // 1. Save the package record (for usage tracking)
+      const packageToInsert = {
+        patient_id: data.patientId || data.patient_id,
+        total_sessions: data.total_sessions,
+        price: data.price,
+        status: data.status || 'active',
+        used_sessions: 0,
+        created_by: user?.id
+      };
+
+      const { data: newPackage, error: pkgError } = await (supabase as any)
+        .from('patient_packages')
+        .insert([packageToInsert])
+        .select()
+        .single();
+      
+      if (pkgError) throw pkgError;
+      
+      // 2. Create a PENDING "Appointment" for the Package Sale
+      // This makes it show up in "SESSÕES A RECEBER" in Financial View
+      const financialAppointment = {
+        patient_id: data.patientId || data.patient_id,
+        patient_name: selectedPatient?.name || 'Paciente',
+        date: data.date || new Date().toISOString().split('T')[0],
+        time: '00:00',
+        duration: 0,
+        type: `Venda de Pacote - ${data.total_sessions} sessões`,
+        status: 'Confirmado',
+        payment_status: 'pendente',
+        price: data.price,
+        notes: `Pacote ID: ${newPackage.id}`,
+        is_unscheduled: true,
+        created_by: user?.id,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: newApp, error: appError } = await supabase
+        .from('appointments')
+        .insert([financialAppointment])
+        .select()
+        .single();
+
+      if (appError) {
+        console.error('Error creating financial appointment for package:', appError);
+        throw appError;
+      }
+
+      if (newPackage) {
+        setPackages(prev => [newPackage, ...prev]);
+        if (newApp) setAppointments(prev => [newApp, ...prev]);
+        
+        addNotification(
+          'Pacote Vendido', 
+          `Pacote registrado. Confirme o recebimento de R$ ${data.price.toLocaleString('pt-BR')} no Financeiro.`, 
+          'success'
+        );
+        fetchData();
+      }
+    } catch (error: any) {
+      console.error('Error saving package:', error);
+      addNotification('Erro ao salvar pacote', `Ocorreu um erro: ${error.message || 'Verifique a conexão.'}`, 'error');
+    }
+  };
 
   const handleSaveInventoryItem = async (data: any) => {
     const sb = getClientSupabase();
@@ -875,13 +992,14 @@ export default function Home() {
             onStartConsultation={() => {
               // DETECT: Is there an appointment for this patient today?
               const todayStr = new Date().toISOString().split('T')[0];
-              const hasTodayAppointment = appointments.some(app => 
+              const todayAppointment = appointments.find(app => 
                 app.patientId === selectedPatient?.id && 
                 app.date === todayStr && 
                 app.status === 'scheduled'
               );
               
-              setIsUnscheduledCandidate(!hasTodayAppointment);
+              setIsUnscheduledCandidate(!todayAppointment);
+              setIsCurrentConsultationPackage(!!todayAppointment?.is_package_session);
               setEditingConsultation(null);
               setIsConsultationModalOpen(true);
               
@@ -898,6 +1016,8 @@ export default function Home() {
             onDeleteConsultation={(consultationId) => {
               setConsultationToDelete(consultationId);
             }}
+            packages={packages}
+            onSavePackage={handleSavePackage}
           />
         );
       case 'evaluations':
@@ -908,8 +1028,18 @@ export default function Home() {
             evaluations={evaluations}
             patients={patients}
             onSaveEvaluation={handleSaveEvaluation}
-            onDeleteEvaluation={handleDeleteEvaluation}
-            user={user}
+            onDeleteEvaluation={async (id) => {
+              if (!supabase) return;
+              try {
+                const { error } = await supabase.from('evaluations').delete().eq('id', id);
+                if (error) throw error;
+                setEvaluations(prev => prev.filter(e => e.id !== id));
+                addNotification('Avaliação Excluída', 'Registro removido com sucesso.', 'info');
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+            user={user!}
           />
         );
       case 'calendar':
@@ -926,6 +1056,7 @@ export default function Home() {
               setEditingPatient(null);
               setIsPatientModalOpen(true);
             }}
+            packages={packages}
           />
         );
       case 'auricular':
@@ -1081,10 +1212,13 @@ export default function Home() {
         onClose={() => {
           setIsConsultationModalOpen(false);
           setEditingConsultation(null);
+          setIsCurrentConsultationPackage(false);
+          setIsUnscheduledCandidate(false);
         }}
         inventoryItems={inventoryItems}
         specialties={specialties}
         isUnscheduledCandidate={isUnscheduledCandidate}
+        isPackageSession={isCurrentConsultationPackage}
         requireExtraConsultationConfirm={requireExtraConsultationConfirm}
         onSave={async (data) => {
           if (!supabase) return;

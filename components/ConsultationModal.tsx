@@ -33,6 +33,7 @@ interface ConsultationModalProps {
   specialties?: any[];
   isUnscheduledCandidate?: boolean;
   requireExtraConsultationConfirm?: boolean;
+  isPackageSession?: boolean;
 }
 
 type ConsultationStatus = 'idle' | 'running' | 'finished';
@@ -47,7 +48,8 @@ export default function ConsultationModal({
   inventoryItems,
   specialties = [],
   isUnscheduledCandidate = false,
-  requireExtraConsultationConfirm = true
+  requireExtraConsultationConfirm = true,
+  isPackageSession = false
 }: ConsultationModalProps) {
   const [status, setStatus] = useState<ConsultationStatus>(() => {
     if (editingConsultation) return 'finished';
@@ -242,6 +244,16 @@ export default function ConsultationModal({
                       </div>
                     </div>
                   )}
+
+                  {isPackageSession && (
+                    <div className="mt-4 p-4 bg-primary/5 rounded-2xl border border-primary/10 flex items-center gap-3">
+                      <Plus size={18} className="text-primary" />
+                      <div>
+                        <p className="text-xs font-bold text-primary uppercase tracking-widest leading-none">Sessão de Pacote</p>
+                        <p className="text-[10px] text-on-surface-variant font-medium mt-1">Esta consulta não gera cobrança adicional.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -298,7 +310,12 @@ export default function ConsultationModal({
                             value={material.itemId}
                             onChange={(e) => {
                               const newList = [...usedMaterials];
-                              newList[index].itemId = e.target.value;
+                              const selectedItem = inventoryItems.find(i => i.id === e.target.value);
+                              newList[index] = {
+                                ...newList[index],
+                                itemId: e.target.value,
+                                itemName: selectedItem?.name || ''
+                              };
                               setUsedMaterials(newList);
                             }}
                             className="flex-1 min-w-0 px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 outline-none text-sm font-medium"
@@ -397,7 +414,7 @@ export default function ConsultationModal({
               <div className="w-20 h-20 rounded-3xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto">
                 <AlertCircle size={40} />
               </div>
-              
+
               <div className="text-center space-y-2">
                 <h3 className="text-2xl font-bold font-headline text-on-surface">Consulta Extra</h3>
                 <p className="text-on-surface-variant font-medium">
