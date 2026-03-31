@@ -15,7 +15,8 @@ import {
   ClipboardList,
   Package,
   LogOut,
-  Shield
+  Shield,
+  BarChart3
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { motion } from 'motion/react';
@@ -40,6 +41,7 @@ const navItems = [
   { id: 'inventory', label: 'Estoque', icon: Package },
   { id: 'users', label: 'Usuários', icon: Users },
   { id: 'settings', label: 'Configurações', icon: Settings },
+  { id: 'reports', label: 'Relatórios', icon: BarChart3 },
   { id: 'audit_logs', label: 'Auditoria', icon: Shield },
 ];
 

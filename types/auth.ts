@@ -104,6 +104,14 @@ export const ALL_PERMISSIONS: Permission[] = [
     ]
   },
   { 
+    id: 'reports', 
+    label: 'Relatórios',
+    sub: [
+      { id: 'reports:view', label: 'Visualizar Relatórios' },
+      { id: 'reports:export', label: 'Exportar Dados' }
+    ]
+  },
+  { 
     id: 'settings', 
     label: 'Configurações',
     sub: [
@@ -145,6 +153,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'auricular', 'auricular:view', 'auricular:edit',
     'protocols', 'protocols:view', 'protocols:create', 'protocols:edit',
     'inventory', 'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete',
+    'reports', 'reports:view', 'reports:export',
     'settings', 'settings:profile'
   ],
   SECRETARY: [

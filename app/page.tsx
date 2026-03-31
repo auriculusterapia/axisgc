@@ -18,6 +18,7 @@ import AuditLogsView from '@/components/AuditLogsView';
 import EvaluationsView from '@/components/EvaluationsView';
 import LoginView from '@/components/LoginView';
 import BottomNav from '@/components/BottomNav';
+import ReportsView from '@/components/ReportsView';
 import { AnimatePresence, motion } from 'motion/react';
 import PatientModal from '@/components/PatientModal';
 import ConsultationModal from '@/components/ConsultationModal';
@@ -115,6 +116,7 @@ export default function Home() {
   });
   const [activeToasts, setActiveToasts] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
+  const [financialTransactions, setFinancialTransactions] = useState<any[]>([]);
 
   const addNotification = useCallback((title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     if (!isNotificationsEnabled) return;
@@ -217,7 +219,8 @@ export default function Home() {
         { data: evaluationsData },
         { data: protocolsData },
         { data: inventoryData },
-        { data: packagesData }
+        { data: packagesData },
+        { data: financialTransactionsData }
       ] = await Promise.all([
         (supabase as any).from('patients').select('*').order('name'),
         (supabase as any).from('appointments').select('*').order('date', { ascending: false }),
@@ -225,7 +228,8 @@ export default function Home() {
         (supabase as any).from('evaluations').select('*').order('date', { ascending: false }),
         (supabase as any).from('protocols').select('*').order('name'),
         (supabase as any).from('inventory_items').select('*').order('name'),
-        (supabase as any).from('patient_packages').select('*').order('date', { ascending: false })
+        (supabase as any).from('patient_packages').select('*').order('date', { ascending: false }),
+        (supabase as any).from('financial_transactions').select('*').order('date', { ascending: false })
       ]);
 
       if (patientsData) {
@@ -289,6 +293,9 @@ export default function Home() {
       }
       if (packagesData) {
         setPackages(packagesData);
+      }
+      if (financialTransactionsData) {
+        setFinancialTransactions(financialTransactionsData);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -1221,6 +1228,16 @@ export default function Home() {
         return <SettingsView user={user} onLogout={handleLogout} />;
       case 'audit_logs':
         return <AuditLogsView user={user} />;
+      case 'reports':
+        return (
+          <ReportsView 
+            user={user}
+            patients={patients}
+            appointments={appointments}
+            financialTransactions={financialTransactions}
+            inventoryItems={inventoryItems}
+          />
+        );
       default:
         return (
           <div className="flex items-center justify-center h-full">
