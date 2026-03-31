@@ -62,9 +62,17 @@ export const checkConnection = async (): Promise<boolean> => {
   }
 };
 
-// Sempre usa getSupabase() para garantir que o cliente seja inicializado no contexto correto
-// O singleton no módulo pode ser null se for avaliado no servidor (SSR)
-export const supabase = typeof window !== 'undefined' ? getSupabase() : null;
+// Exporta um Proxy para que qualquer módulo que importe 'supabase' sempre use a instância ativa
+// Isso resolve o problema de referências "congeladas" em módulos que importam a constante no início
+export const supabase = new Proxy({} as any, {
+  get(target, prop) {
+    const client = getSupabase();
+    if (!client) return undefined;
+    const value = (client as any)[prop];
+    // Se for uma função (como .from() ou .auth.getUser()), garante que o contexto 'this' seja o cliente
+    return typeof value === 'function' ? value.bind(client) : value;
+  }
+}) as SupabaseClient<Database>;
 
 // Helper para uso seguro em handlers do cliente
 export const getClientSupabase = () => {

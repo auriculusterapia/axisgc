@@ -479,7 +479,12 @@ export default function Home() {
       const { error } = await supabase.from('patients').delete().eq('id', patientToDelete.id);
       if (error) throw error;
       setPatients(prev => prev.filter(p => p.id !== patientToDelete.id));
-      await logAction({ action: 'DELETE', entityType: 'PATIENTS', details: { summary: `Paciente excluído: ${patientToDelete.name}`, id: patientToDelete.id } });
+      await logAction({ 
+        action: 'DELETE', 
+        entityType: 'PATIENTS', 
+        userId: user.id,
+        details: { summary: `Paciente excluído: ${patientToDelete.name}`, id: patientToDelete.id } 
+      });
       console.log('app/page.tsx: Paciente excluído com sucesso');
     } catch (error) {
       console.error('Error deleting patient:', error);
@@ -546,7 +551,12 @@ export default function Home() {
         }
         if (newAppointment) {
           setAppointments(prev => [newAppointment, ...prev]);
-          await logAction({ action: 'CREATE', entityType: 'FINANCIAL', details: { summary: `Novo Lançamento/Agendamento: ${data.patientName} (Status: ${data.paymentStatus})`, id: newAppointment.id } });
+          await logAction({ 
+            action: 'CREATE', 
+            entityType: 'FINANCIAL', 
+            userId: user.id,
+            details: { summary: `Novo Lançamento/Agendamento: ${data.patientName} (Status: ${data.paymentStatus})`, id: newAppointment.id } 
+          });
 
           // If it's a package session, update the package usage
           if (data.isPackageSession && data.packageId) {
@@ -574,7 +584,12 @@ export default function Home() {
       }
       
       if (data.id) {
-        await logAction({ action: 'UPDATE', entityType: 'FINANCIAL', details: { summary: `Lançamento/Agendamento Atualizado: ${data.patientName} (Status: ${data.paymentStatus})`, id: data.id } });
+        await logAction({ 
+          action: 'UPDATE', 
+          entityType: 'FINANCIAL', 
+          userId: user.id,
+          details: { summary: `Lançamento/Agendamento Atualizado: ${data.patientName} (Status: ${data.paymentStatus})`, id: data.id } 
+        });
       }
       
       console.log('app/page.tsx: Agendamento salvo com sucesso');
@@ -619,7 +634,12 @@ export default function Home() {
         }
       }
 
-      await logAction({ action: 'DELETE', entityType: 'APPOINTMENTS', details: { summary: `Consulta/Transação excluída: ${appToDel.patientName}`, id } });
+      await logAction({ 
+        action: 'DELETE', 
+        entityType: 'APPOINTMENTS', 
+        userId: user.id,
+        details: { summary: `Consulta/Transação excluída: ${appToDel.patientName}`, id } 
+      });
     } catch (error) {
       console.error('Error deleting appointment:', error);
     }
@@ -696,7 +716,12 @@ export default function Home() {
       const { error } = await supabase.from('evaluations').delete().eq('id', id);
       if (error) throw error;
       setEvaluations(prev => prev.filter(e => e.id !== id));
-      await logAction({ action: 'DELETE', entityType: 'EVALUATIONS', details: { id } });
+      await logAction({ 
+        action: 'DELETE', 
+        entityType: 'EVALUATIONS', 
+        userId: user.id,
+        details: { id } 
+      });
     } catch (error) {
       console.error('Error deleting evaluation:', error);
     }
@@ -750,7 +775,12 @@ export default function Home() {
       const { error } = await supabase.from('protocols').delete().eq('id', id);
       if (error) throw error;
       setProtocols(prev => prev.filter(p => p.id !== id));
-      await logAction({ action: 'DELETE', entityType: 'SYSTEM', details: { target: 'Protocolo', id } });
+      await logAction({ 
+        action: 'DELETE', 
+        entityType: 'SYSTEM', 
+        userId: user.id,
+        details: { target: 'Protocolo', id } 
+      });
     } catch (error) {
       console.error('Error deleting protocol:', error);
     }
@@ -814,6 +844,7 @@ export default function Home() {
         await logAction({ 
           action: 'CREATE', 
           entityType: 'FINANCIAL', 
+          userId: user.id,
           details: { summary: `Venda de Pacote: ${data.total_sessions} sessões para ${selectedPatient?.name}`, id: newPackage.id } 
         });
 
@@ -848,6 +879,7 @@ export default function Home() {
       await logAction({ 
         action: 'UPDATE', 
         entityType: 'FINANCIAL', 
+        userId: user.id,
         details: { summary: `Pacote atualizado: ${id}`, id } 
       });
 
@@ -888,6 +920,7 @@ export default function Home() {
       await logAction({ 
         action: 'DELETE', 
         entityType: 'FINANCIAL', 
+        userId: user.id,
         details: { summary: `Pacote excluído: ${id}`, id } 
       });
 
@@ -946,7 +979,12 @@ export default function Home() {
       const { error } = await sb.from('inventory_items').delete().eq('id', id);
       if (error) throw error;
       setInventoryItems(prev => prev.filter(i => i.id !== id));
-      await logAction({ action: 'DELETE', entityType: 'INVENTORY', details: { summary: 'Item de estoque excluído', id } });
+      await logAction({ 
+        action: 'DELETE', 
+        entityType: 'INVENTORY', 
+        userId: user.id,
+        details: { summary: 'Item de estoque excluído', id } 
+      });
     } catch (error) {
       console.error('Error deleting inventory item:', error);
       alert('Erro ao excluir produto.');

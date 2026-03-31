@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, getSupabase } from './supabase';
 
 export type AuditAction = 'LOGIN' | 'LOGOUT' | 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT';
 export type AuditEntityType = 'AUTH' | 'PATIENTS' | 'FINANCIAL' | 'INVENTORY' | 'APPOINTMENTS' | 'EVALUATIONS' | 'SYSTEM';
@@ -45,31 +45,35 @@ export async function isAuditEnabled(): Promise<boolean> {
 }
 
 export async function logAction({ action, entityType, details = {}, entityId, userId }: LogActionParams) {
-  if (!supabase) return;
-
   try {
     const isEnabled = await isAuditEnabled();
-    if (!isEnabled) {
-      console.log(`[AuditLog] Ação ${action} em ${entityType} ignorada (Auditoria desativada).`);
-      return;
-    }
+    if (!isEnabled) return;
 
-    // Se o usuário não foi passado, tenta pegar o atual
+    // Obtém o cliente atualizado via Proxy ou função (garante que não use instância congelada)
+    const client = getSupabase();
+    if (!client) return;
+
+    // Se o usuário não foi passado, tenta pegar o atual da sessão
     let finalUserId = userId;
     if (!finalUserId) {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await client.auth.getUser();
       finalUserId = user?.id;
     }
 
-    if (!finalUserId) {
-      return; // Não registra logs de ações não autenticadas
-    }
+    if (!finalUserId) return;
 
-    // Limpa detalhes de senhas ou dados muito sensíveis (boas práticas)
+    // Captura IP (melhores esforços no lado do cliente)
+    let ipAddress = 'unknown';
+    try {
+      const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2000) });
+      const data = await res.json();
+      ipAddress = data.ip;
+    } catch (e) {}
+
     const safeDetails = { ...details };
     if (safeDetails.password) delete safeDetails.password;
 
-    const { error } = await supabase
+    const { error } = await client
       .from('audit_logs')
       .insert({
         user_id: finalUserId,
@@ -77,11 +81,10 @@ export async function logAction({ action, entityType, details = {}, entityId, us
         entity_type: entityType,
         entity_id: entityId || null,
         details: safeDetails,
+        ip_address: ipAddress
       });
 
-    if (error) {
-      console.error('[AuditLog] Erro ao salvar log de auditoria:', error);
-    }
+    if (error) console.error('[AuditLog] Erro ao salvar log:', error.message);
   } catch (err) {
     console.error('[AuditLog] Erro crítico ao processar log:', err);
   }
