@@ -178,57 +178,155 @@ export default function ReportsView({
     }
   };
 
-  const handleExportPDF = () => {
-    setIsExporting(true);
-    try {
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      
-      // Header
-      doc.setFontSize(22);
-      doc.setTextColor(15, 82, 56);
-      doc.text('Relatório de Desempenho - Axis GC', pageWidth / 2, 20, { align: 'center' });
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')} | Período: ${timeRange.toUpperCase()}`, pageWidth / 2, 28, { align: 'center' });
+  // ── Specialized Export Functions ───────────────────────────────────────────
 
-      // KPI Summary Table
+  const exportCashFlow = (format: 'pdf' | 'xlsx') => {
+    setIsExporting(true);
+    // Combine and sort ALL transactions by date
+    const all = [
+      ...filteredData.appointments.filter(a => a.payment_status === 'pago').map(a => ({
+        date: a.date, type: 'ENTRADA', description: `Sessão: ${a.patient_name || 'Paciente'}`, amount: a.price || 0, category: a.type || 'Consulta'
+      })),
+      ...filteredData.transactions.map(t => ({
+        date: t.date, type: t.type === 'INCOME' ? 'ENTRADA' : 'SAÍDA', description: t.description, amount: t.amount, category: t.category
+      }))
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let runningBalance = 0;
+    const reportData = all.map(item => {
+      runningBalance += item.type === 'ENTRADA' ? item.amount : -item.amount;
+      return { ...item, balance: runningBalance };
+    });
+
+    if (format === 'xlsx') {
+      const ws = XLSX.utils.json_to_sheet(reportData.map(i => ({
+        Data: i.date, Tipo: i.type, Descrição: i.description, Categoria: i.category, Valor: i.amount, 'Saldo Prog.': i.balance
+      })));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Fluxo de Caixa');
+      XLSX.writeFile(wb, `fluxo_de_caixa_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else {
+      const doc = new jsPDF();
+      doc.text('Fluxo de Caixa Detalhado', 14, 20);
       autoTable(doc, {
-        startY: 35,
-        head: [['Indicador', 'Resultado']],
-        body: [
-          ['Receita Bruta', metrics.revenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
-          ['Despesas Totais', metrics.expenses.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
-          ['Lucro Líquido', metrics.profit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
-          ['Atendimentos Realizados', metrics.appointmentsCount.toString()],
-          ['Novos Pacientes', metrics.newPatients.toString()],
-          ['Ticket Médio', metrics.avgTicket.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
-        ],
-        theme: 'striped',
+        startY: 30,
+        head: [['Data', 'Tipo', 'Descrição', 'Valor', 'Saldo']],
+        body: reportData.map(i => [i.date, i.type, i.description, i.amount.toFixed(2), i.balance.toFixed(2)]),
         headStyles: { fillColor: [15, 82, 56] }
       });
-
-      // Protocol Stats
-      const finalY = (doc as any).lastAutoTable.finalY || 40;
-      doc.setFontSize(14);
-      doc.setTextColor(0);
-      doc.text('Top Protocolos Utilizados', 14, finalY + 15);
-
-      autoTable(doc, {
-        startY: finalY + 20,
-        head: [['Protocolo/Procedimento', 'Quantidade']],
-        body: topProtocols.map(p => [p.name || 'Outros', p.value.toString()]),
-        theme: 'grid',
-        headStyles: { fillColor: [45, 156, 219] }
-      });
-
-      doc.save(`relatorio_axisgc_${new Date().toISOString().split('T')[0]}.pdf`);
-    } catch (error) {
-      console.error('PDF error:', error);
-    } finally {
-      setIsExporting(false);
+      doc.save(`fluxo_de_caixa_${new Date().toISOString().split('T')[0]}.pdf`);
     }
+    setIsExporting(false);
+  };
+
+  const exportProfitLoss = (format: 'pdf' | 'xlsx') => {
+    setIsExporting(true);
+    const data = [
+      ['Indicador', 'Valor'],
+      ['(+) Receitas Totais', metrics.revenue],
+      ['(-) Despesas Totais', metrics.expenses],
+      ['(=) Resultado Líquido', metrics.profit],
+      ['Margem de Lucro', `${((metrics.profit / (metrics.revenue || 1)) * 100).toFixed(1)}%`],
+      ['Ponto de Equilíbrio (Est)', metrics.expenses]
+    ];
+    if (format === 'xlsx') {
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'DRE - Lucro e Prejuízo');
+      XLSX.writeFile(wb, `demonstrativo_resultado_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else {
+      const doc = new jsPDF();
+      doc.text('Demonstrativo de Resultado (Lucro/Prejuízo)', 14, 20);
+      autoTable(doc, { startY: 30, body: data, theme: 'striped', headStyles: { fillColor: [15, 82, 56] } });
+      doc.save(`dre_resultado_${new Date().toISOString().split('T')[0]}.pdf`);
+    }
+    setIsExporting(false);
+  };
+
+  const exportServiceRevenue = (format: 'pdf' | 'xlsx') => {
+    setIsExporting(true);
+    // Group by specialty (type)
+    const stats: Record<string, { name: string, count: number, total: number }> = {};
+    filteredData.appointments.forEach(a => {
+      const key = a.type || 'Outros';
+      if (!stats[key]) stats[key] = { name: key, count: 0, total: 0 };
+      stats[key].count++;
+      stats[key].total += (a.price || 0);
+    });
+    const reportData = Object.values(stats).sort((a,b) => b.total - a.total);
+
+    if (format === 'xlsx') {
+      const ws = XLSX.utils.json_to_sheet(reportData.map(i => ({ Serviço: i.name, 'Qtd Atendimentos': i.count, 'Total Faturado': i.total })));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Faturamento por Serviço');
+      XLSX.writeFile(wb, `faturamento_servicos_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else {
+      const doc = new jsPDF();
+      doc.text('Faturamento por Especialidade / Serviço', 14, 20);
+      autoTable(doc, {
+        startY: 30,
+        head: [['Serviço', 'Atendimentos', 'Total']],
+        body: reportData.map(i => [i.name, i.count.toString(), i.total.toFixed(2)]),
+        headStyles: { fillColor: [15, 82, 56] }
+      });
+      doc.save(`servicos_ranking_${new Date().toISOString().split('T')[0]}.pdf`);
+    }
+    setIsExporting(false);
+  };
+
+  const exportInventoryAssets = (format: 'pdf' | 'xlsx') => {
+    setIsExporting(true);
+    const reportData = inventoryItems.map(i => ({
+      name: i.name,
+      quantity: i.quantity,
+      unit_cost: i.unit_cost || 0,
+      total_value: (i.quantity || 0) * (i.unit_cost || 0)
+    }));
+    const totalAsset = reportData.reduce((s, i) => s + i.total_value, 0);
+
+    if (format === 'xlsx') {
+      const data = [...reportData.map(i => ({ Item: i.name, Qtd: i.quantity, 'Custo Unit.': i.unit_cost, 'Valor Total': i.total_value })), { Item: 'TOTAL GERAL', 'Valor Total': totalAsset }];
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Estoque e Ativos');
+      XLSX.writeFile(wb, `inventario_custo_medio_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else {
+      const doc = new jsPDF();
+      doc.text('Gestão de Estoque e Ativos (Custo Médio)', 14, 20);
+      autoTable(doc, {
+        startY: 30,
+        head: [['Item', 'Qtd', 'Custo Unit.', 'Valor Total']],
+        body: [...reportData.map(i => [i.name, i.quantity.toString(), i.unit_cost.toFixed(2), i.total_value.toFixed(2)]), ['TOTAL', '', '', totalAsset.toFixed(2)]],
+        headStyles: { fillColor: [15, 82, 56] }
+      });
+      doc.save(`estoque_ativos_${new Date().toISOString().split('T')[0]}.pdf`);
+    }
+    setIsExporting(false);
+  };
+
+  const handleExportGeneralPDF = () => {
+    setIsExporting(true);
+    const doc = new jsPDF();
+    doc.setFontSize(22);
+    doc.setTextColor(15, 82, 56);
+    doc.text('Relatório Geral de Desempenho - Axis GC', 105, 20, { align: 'center' });
+    
+    autoTable(doc, {
+      startY: 30,
+      head: [['Indicador', 'Resultado']],
+      body: [
+        ['Receita Total', metrics.revenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
+        ['Despesa Total', metrics.expenses.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
+        ['Lucro Líquido', metrics.profit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
+        ['Atendimentos', metrics.appointmentsCount.toString()],
+        ['Novos Pacientes', metrics.newPatients.toString()],
+        ['Ticket Médio', metrics.avgTicket.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [15, 82, 56] }
+    });
+    doc.save(`relatorio_geral_${new Date().toISOString().split('T')[0]}.pdf`);
+    setIsExporting(false);
   };
 
   return (
@@ -267,14 +365,14 @@ export default function ReportsView({
               disabled={isExporting}
               className="px-5 py-3 rounded-2xl bg-indigo-50 text-indigo-600 font-bold text-sm hover:bg-indigo-100 transition-all flex items-center gap-2 border border-indigo-100"
             >
-              <FileSpreadsheet size={18} /> Excel
+              <FileSpreadsheet size={18} /> Excel (Geral)
             </button>
             <button 
-              onClick={handleExportPDF}
+              onClick={handleExportGeneralPDF}
               disabled={isExporting}
               className="px-5 py-3 rounded-2xl bg-rose-50 text-rose-600 font-bold text-sm hover:bg-rose-100 transition-all flex items-center gap-2 border border-rose-100"
             >
-              <File size={18} /> PDF
+              <File size={18} /> PDF (Geral)
             </button>
           </div>
         </div>
@@ -310,6 +408,49 @@ export default function ReportsView({
           icon={TrendingUp}
           color={metrics.profit >= 0 ? 'emerald' : 'rose'}
         />
+      </section>
+
+      {/* DOWNLOADS ESPECIALIZADOS - NEW SECTION */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 px-2">
+          <TrendingUp size={20} className="text-primary" />
+          <h3 className="text-xl font-headline font-bold text-on-surface">Downloads Estratégicos</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <ReportDownloadCard 
+            title="Fluxo de Caixa"
+            desc="Entradas, saídas e saldo progressivo dia a dia."
+            onPdf={() => exportCashFlow('pdf')}
+            onXlsx={() => exportCashFlow('xlsx')}
+            icon={TrendingUp}
+            color="emerald"
+          />
+          <ReportDownloadCard 
+            title="Lucro ou Prejuízo"
+            desc="Comparativo direto (DRE) entre ganhos e gastos."
+            onPdf={() => exportProfitLoss('pdf')}
+            onXlsx={() => exportProfitLoss('xlsx')}
+            icon={BarChart3}
+            color="indigo"
+          />
+          <ReportDownloadCard 
+            title="Faturamento por Serviço"
+            desc="Ranking de rentabilidade por especialidade."
+            onPdf={() => exportServiceRevenue('pdf')}
+            onXlsx={() => exportServiceRevenue('xlsx')}
+            icon={Users}
+            color="amber"
+          />
+          <ReportDownloadCard 
+            title="Estoque & Custo Médio"
+            desc="Valor patrimonial e consumo de materiais."
+            onPdf={() => exportInventoryAssets('pdf')}
+            onXlsx={() => exportInventoryAssets('xlsx')}
+            icon={Package}
+            color="rose"
+          />
+        </div>
       </section>
 
       {/* Main Charts Row */}
@@ -363,7 +504,7 @@ export default function ReportsView({
                   outerRadius={100}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                  label={({ name, percent }: any) => `${name} (${((percent || 0) * 100).toFixed(0)}%)`}
                 >
                   {topProtocols.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -485,6 +626,46 @@ function KPICard({ title, value, subtitle, icon: Icon, color }: any) {
       <p className="text-xs font-bold text-outline uppercase tracking-widest mb-1">{title}</p>
       <h3 className={`text-2xl font-headline font-extrabold ${colorMap[color].split(' ')[1]}`}>{value}</h3>
       <p className="text-xs text-outline mt-1 font-medium">{subtitle}</p>
+    </motion.div>
+  );
+}
+
+function ReportDownloadCard({ title, desc, onPdf, onXlsx, icon: Icon, color }: any) {
+  const colorMap: Record<string, string> = {
+    primary: 'bg-primary/5 text-primary',
+    emerald: 'bg-emerald-50 text-emerald-700',
+    amber: 'bg-amber-50 text-amber-700',
+    rose: 'bg-rose-50 text-rose-700',
+    indigo: 'bg-indigo-50 text-indigo-700',
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+      className="bg-white p-6 rounded-[2rem] border border-outline-variant/10 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group"
+    >
+      <div>
+        <div className={`w-10 h-10 rounded-xl ${colorMap[color]} flex items-center justify-center mb-4`}>
+          <Icon size={20} />
+        </div>
+        <h4 className="text-base font-bold text-on-surface mb-1">{title}</h4>
+        <p className="text-xs text-outline leading-relaxed mb-6">{desc}</p>
+      </div>
+      
+      <div className="flex gap-2">
+        <button 
+          onClick={onPdf}
+          className="flex-1 py-2.5 rounded-xl bg-surface-container-low text-on-surface text-[10px] font-bold hover:bg-rose-50 hover:text-rose-600 transition-all border border-outline-variant/5 flex items-center justify-center gap-1.5"
+        >
+          <File size={14} /> PDF
+        </button>
+        <button 
+          onClick={onXlsx}
+          className="flex-1 py-2.5 rounded-xl bg-surface-container-low text-on-surface text-[10px] font-bold hover:bg-emerald-50 hover:text-emerald-700 transition-all border border-outline-variant/5 flex items-center justify-center gap-1.5"
+        >
+          <FileSpreadsheet size={14} /> XLSX
+        </button>
+      </div>
     </motion.div>
   );
 }
