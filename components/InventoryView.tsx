@@ -37,6 +37,7 @@ interface InventoryTransaction {
   item_id: string;
   type: 'IN' | 'OUT';
   quantity: number;
+  unit_price?: number;
   notes: string;
 }
 
@@ -48,20 +49,28 @@ export default function InventoryView({
   items,
   onSaveItem,
   onDeleteItem,
-  onAddTransaction
+  onAddTransaction,
+  onDeleteTransaction,
+  onFetchHistory
 }: { 
   user?: User | null;
   items: InventoryItem[];
   onSaveItem: (data: any) => Promise<void>;
   onDeleteItem: (id: string) => Promise<void>;
   onAddTransaction: (data: InventoryTransaction) => Promise<void>;
+  onDeleteTransaction: (id: string) => Promise<void>;
+  onFetchHistory: (itemId: string) => Promise<any[]>;
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [selectedItemForHistory, setSelectedItemForHistory] = useState<InventoryItem | null>(null);
+  const [historyTransactions, setHistoryTransactions] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   
   // Form State - Item
   const [itemFormData, setItemFormData] = useState({
@@ -79,12 +88,15 @@ export default function InventoryView({
   const [transactionFormData, setTransactionFormData] = useState({
     item_id: '',
     type: 'IN' as 'IN' | 'OUT',
+    category: 'PURCHASE' as 'PURCHASE' | 'USAGE' | 'ADJUST',
     quantity: 1,
+    unit_price: 0,
     notes: ''
   });
 
   const canCreate = user?.permissions.includes('inventory:create') || user?.role === 'ADMIN';
   const canEdit = user?.permissions.includes('inventory:edit') || user?.role === 'ADMIN';
+  const canUndo = user?.permissions.includes('inventory:undo') || user?.role === 'ADMIN';
   const canDelete = user?.permissions.includes('inventory:delete') || user?.role === 'ADMIN';
 
   const lowStockItems = items.filter(item => item.quantity <= item.min_quantity);
@@ -122,7 +134,9 @@ export default function InventoryView({
     setTransactionFormData({
       item_id: item.id,
       type: defaultType,
+      category: defaultType === 'IN' ? 'PURCHASE' : 'USAGE',
       quantity: 1,
+      unit_price: item.unit_cost || 0,
       notes: ''
     });
     setIsTransactionModalOpen(true);
@@ -159,9 +173,32 @@ export default function InventoryView({
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este item? Todo o histórico de entradas e saídas será perdido.')) {
-      await onDeleteItem(id);
+  const handleOpenHistory = async (item: InventoryItem) => {
+    setSelectedItemForHistory(item);
+    setIsLoadingHistory(true);
+    setIsHistoryModalOpen(true);
+    try {
+      const data = await onFetchHistory(item.id);
+      setHistoryTransactions(data);
+    } catch (err) {
+      console.error('Erro ao carregar histórico:', err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleUndoTransaction = async (transactionId: string) => {
+    if (confirm('Deseja realmente estornar esta movimentação? Isso reverterá a quantidade e o custo médio ponderado do item.')) {
+      try {
+        await onDeleteTransaction(transactionId);
+        // Refresh local history
+        if (selectedItemForHistory) {
+          const data = await onFetchHistory(selectedItemForHistory.id);
+          setHistoryTransactions(data);
+        }
+      } catch (err) {
+        console.error('Erro ao estornar:', err);
+      }
     }
   };
 
@@ -257,7 +294,7 @@ export default function InventoryView({
             <tbody>
               {filteredItems.length === 0 ? (
                  <tr>
-                    <td colSpan={5} className="py-12 text-center text-outline">Nenhum item encontrado.</td>
+                    <td colSpan={7} className="py-12 text-center text-outline">Nenhum item encontrado.</td>
                  </tr>
               ) : (
                 filteredItems.map(item => {
@@ -333,6 +370,13 @@ export default function InventoryView({
                               <ArrowDownToLine size={16} />
                            </button>
                            <button 
+                            onClick={() => handleOpenHistory(item)}
+                            title="Ver Histórico"
+                            className="p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors"
+                           >
+                              <History size={16} />
+                           </button>
+                           <button 
                             onClick={() => handleOpenItemModal(item)}
                             title="Editar Item"
                             className="p-2 rounded-lg bg-surface-container text-on-surface-variant hover:text-primary transition-colors ml-2"
@@ -341,7 +385,7 @@ export default function InventoryView({
                            </button>
                            {canDelete && (
                               <button 
-                                onClick={() => handleDelete(item.id)}
+                                onClick={() => onDeleteItem(item.id)}
                                 title="Excluir"
                                 className="p-2 rounded-lg bg-surface-container text-outline hover:text-rose-500 transition-all"
                               >
@@ -547,22 +591,79 @@ export default function InventoryView({
                 </button>
               </div>
 
-              <form onSubmit={handleSaveTransaction} className="p-8 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-outline uppercase tracking-widest">Quantidade</label>
-                  <input 
-                    required
-                    type="number" 
-                    min="0.01"
-                    step="0.01"
-                    value={transactionFormData.quantity}
-                    onChange={e => setTransactionFormData({...transactionFormData, quantity: parseFloat(e.target.value)})}
-                    className="w-full px-5 py-4 text-center text-3xl bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-bold"
-                  />
-                  <p className="text-center text-xs text-outline font-medium mt-1">
-                    Estoque Atual: {items.find(i => i.id === transactionFormData.item_id)?.quantity}
-                  </p>
-                </div>
+                <form onSubmit={handleSaveTransaction} className="p-8 space-y-6">
+                 <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Finalidade da Movimentação</label>
+                    <select 
+                      value={transactionFormData.category}
+                      onChange={e => {
+                        const newCat = e.target.value as any;
+                        setTransactionFormData({
+                          ...transactionFormData, 
+                          category: newCat,
+                          type: (newCat === 'PURCHASE' || (newCat === 'ADJUST' && transactionFormData.type === 'IN')) ? 'IN' : 'OUT'
+                        });
+                      }}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none"
+                    >
+                      <option value="PURCHASE">Compra (Entrada + Financeiro)</option>
+                      <option value="USAGE">Consumo / Uso Interno (Saída)</option>
+                      <option value="ADJUST">Ajuste Técnico de Inventário (Correção)</option>
+                    </select>
+                    {transactionFormData.category === 'ADJUST' && (
+                      <div className="flex bg-surface-container-low p-1 rounded-xl gap-1 mt-2">
+                        <button 
+                          type="button"
+                          onClick={() => setTransactionFormData({...transactionFormData, type: 'IN'})}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${transactionFormData.type === 'IN' ? 'bg-emerald-500 text-white shadow-sm' : 'text-outline hover:bg-surface-container'}`}
+                        >
+                          Entrada (Sobra)
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setTransactionFormData({...transactionFormData, type: 'OUT'})}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${transactionFormData.type === 'OUT' ? 'bg-amber-500 text-white shadow-sm' : 'text-outline hover:bg-surface-container'}`}
+                        >
+                          Saída (Perda)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                 <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Quantidade</label>
+                    <input 
+                      required
+                      type="number" 
+                      min="0.01"
+                      step="0.01"
+                      value={transactionFormData.quantity}
+                      onChange={e => setTransactionFormData({...transactionFormData, quantity: parseFloat(e.target.value)})}
+                      className="w-full px-5 py-4 text-center text-3xl bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-bold"
+                    />
+                    <p className="text-center text-xs text-outline font-medium mt-1">
+                      Estoque Atual: {items.find(i => i.id === transactionFormData.item_id)?.quantity}
+                    </p>
+                  </div>
+                  
+                  {transactionFormData.category === 'PURCHASE' && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-outline uppercase tracking-widest">Preço de Compra (Unitário R$)</label>
+                      <input 
+                        required
+                        type="number" 
+                        min="0"
+                        step="0.01"
+                        value={transactionFormData.unit_price}
+                        onChange={e => setTransactionFormData({...transactionFormData, unit_price: parseFloat(e.target.value)})}
+                        className="w-full px-5 py-4 bg-emerald-50 rounded-xl border border-emerald-100 focus:ring-2 focus:ring-primary/20 outline-none font-bold text-emerald-900"
+                        placeholder="Valor pago por unidade"
+                      />
+                      <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider text-center">
+                        Esta entrada gerará uma despesa automática no financeiro.
+                      </p>
+                    </div>
+                  )}
 
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-outline uppercase tracking-widest">Motivo / Observação</label>
@@ -587,6 +688,134 @@ export default function InventoryView({
                   )}
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* History Modal */}
+      <AnimatePresence>
+        {isHistoryModalOpen && selectedItemForHistory && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsHistoryModalOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="p-8 border-b border-outline-variant/10 flex justify-between items-center bg-indigo-600 text-white">
+                <div>
+                  <h3 className="text-2xl font-bold font-headline flex items-center gap-3">
+                    <History /> Histórico: {selectedItemForHistory.name}
+                  </h3>
+                  <p className="text-white/80 text-sm mt-1">Todas as movimentações registradas para este item.</p>
+                </div>
+                <button 
+                  onClick={() => setIsHistoryModalOpen(false)}
+                  className="p-2 hover:bg-white/20 rounded-full transition-all"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto p-8 flex-1">
+                {isLoadingHistory ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4">
+                    <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-outline font-medium">Carregando histórico...</p>
+                  </div>
+                ) : historyTransactions.length === 0 ? (
+                  <div className="text-center py-20 text-outline">
+                    Nenhuma movimentação encontrada.
+                  </div>
+                ) : (
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-outline-variant/10">
+                        <th className="py-4 px-4 text-xs font-bold text-outline uppercase tracking-widest text-center">Tipo</th>
+                        <th className="py-4 px-4 text-xs font-bold text-outline uppercase tracking-widest">Data</th>
+                        <th className="py-4 px-4 text-xs font-bold text-outline uppercase tracking-widest text-right">Qtd</th>
+                        <th className="py-4 px-4 text-xs font-bold text-outline uppercase tracking-widest text-right">Preço Unit.</th>
+                        <th className="py-4 px-4 text-xs font-bold text-outline uppercase tracking-widest">Observação</th>
+                        <th className="py-4 px-4 text-xs font-bold text-outline uppercase tracking-widest text-center">Estorno</th>
+                        <th className="py-4 px-4 text-xs font-bold text-outline uppercase tracking-widest text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant/5">
+                      {historyTransactions.map((t) => (
+                        <tr key={t.id} className="hover:bg-surface-container-low/50 transition-colors">
+                          <td className={`py-4 px-4 text-center ${t.is_reversed ? 'opacity-40' : ''}`}>
+                            {t.type === 'IN' ? (
+                              <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 inline-block">
+                                <ArrowUpFromLine size={14} />
+                              </span>
+                            ) : (
+                              <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600 inline-block">
+                                <ArrowDownToLine size={14} />
+                              </span>
+                            )}
+                          </td>
+                          <td className={`py-4 px-4 ${t.is_reversed ? 'opacity-40 line-through' : ''}`}>
+                            <div className="flex flex-col">
+                              <span className="text-on-surface font-medium">
+                                {new Date(t.created_at).toLocaleDateString('pt-BR')}
+                              </span>
+                              <span className="text-[10px] text-outline">
+                                {new Date(t.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </td>
+                          <td className={`py-4 px-4 text-right ${t.is_reversed ? 'opacity-40 line-through' : ''}`}>
+                            <span className={`font-bold ${t.type === 'IN' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {t.type === 'IN' ? '+' : '-'}{t.quantity}
+                            </span>
+                          </td>
+                          <td className={`py-4 px-4 text-right font-medium ${t.is_reversed ? 'opacity-40 line-through' : ''}`}>
+                            {t.unit_price > 0 ? `R$ ${t.unit_price.toFixed(2)}` : '-'}
+                          </td>
+                          <td className={`py-4 px-4 text-sm text-on-surface-variant italic ${t.is_reversed ? 'opacity-40 line-through' : ''}`}>
+                            {t.notes || '-'}
+                          </td>
+                          <td className="py-4 px-4 text-center relative overflow-hidden">
+                            {t.is_reversed && (
+                              <motion.div 
+                                initial={{ scale: 2, opacity: 0, rotate: -20 }}
+                                animate={{ scale: 1, opacity: 1, rotate: -15 }}
+                                className="inline-block px-3 py-1 border-4 border-rose-600 text-rose-600 font-black text-[11px] uppercase tracking-tighter rounded-sm mt-1 shadow-[2px_2px_0px_rgba(225,29,72,0.2)]"
+                                style={{ 
+                                  fontFamily: 'monospace',
+                                  maskImage: 'radial-gradient(circle, #000 70%, transparent 100%)',
+                                  WebkitMaskImage: 'radial-gradient(circle, #000 70%, transparent 100%)'
+                                }}
+                              >
+                                Estornado
+                              </motion.div>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 text-right">
+                            {!t.is_reversed && canUndo && (
+                              <button 
+                                onClick={() => handleUndoTransaction(t.id)}
+                                className="p-2 text-outline hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                                title="Estornar / Desfazer"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </motion.div>
           </div>
         )}

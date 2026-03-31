@@ -90,6 +90,7 @@ export const ALL_PERMISSIONS: Permission[] = [
       { id: 'inventory:view', label: 'Visualizar Estoque' },
       { id: 'inventory:create', label: 'Cadastrar Item' },
       { id: 'inventory:edit', label: 'Editar/Movimentar Estoque' },
+      { id: 'inventory:undo', label: 'Estornar Movimentação' },
       { id: 'inventory:delete', label: 'Excluir Item' }
     ]
   },

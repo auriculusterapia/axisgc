@@ -1002,31 +1002,170 @@ export default function Home() {
     const sb = getClientSupabase();
     if (!sb || !user) return;
     try {
-      const { error: transactionError } = await sb.from('inventory_transactions').insert([{
+      const item = inventoryItems.find(i => i.id === data.item_id);
+      if (!item) throw new Error('Item não encontrado.');
+
+      let financialId: string | null = null;
+      let newQty = Number(item.quantity) || 0;
+      let newAvgCost = Number(item.unit_cost || 0);
+
+      const Q_curr = Number(item.quantity) || 0;
+      const C_curr = Number(item.unit_cost || 0);
+      const Q_trans = Number(data.quantity) || 0;
+      const C_trans = Number(data.unit_price || 0);
+
+      // --- 1. Lógica por Categoria ---
+      if (data.category === 'PURCHASE') {
+        // Compra sempre aumenta estoque e recalcula Custo Médio
+        newAvgCost = (Q_curr + Q_trans) > 0 ? ((Q_curr * C_curr) + (Q_trans * C_trans)) / (Q_curr + Q_trans) : C_trans;
+        newQty = Q_curr + Q_trans;
+
+        // Gera registro financeiro se houver valor
+        if (C_trans > 0) {
+          const { data: finData, error: financialError } = await (sb as any)
+            .from('financial_transactions')
+            .insert([{
+              type: 'EXPENSE',
+              description: `Compra: ${item.name} (${Q_trans} ${item.unit})`,
+              amount: Q_trans * C_trans,
+              category: 'Materiais',
+              date: new Date().toISOString().split('T')[0],
+              created_by: user.id
+            }])
+            .select()
+            .single();
+          
+          if (financialError) console.error('Erro ao registrar despesa automática:', financialError);
+          if (finData) financialId = (finData as any).id;
+        }
+      } 
+      else if (data.category === 'USAGE') {
+        // Consumo apenas reduz estoque, mantém custo médio atual
+        newQty = Math.max(0, Q_curr - Q_trans);
+      } 
+      else if (data.category === 'ADJUST') {
+        // Ajuste Técnico (Aumenta ou Diminui) sem alterar Custo Médio (conforme regra de negócio aprovada)
+        if (data.type === 'IN') {
+          newQty = Q_curr + Q_trans;
+        } else {
+          newQty = Math.max(0, Q_curr - Q_trans);
+        }
+      }
+
+      // --- 2. Salvar Transação de Estoque ---
+      const { error: transactionError } = await (sb as any).from('inventory_transactions').insert([{
         item_id: data.item_id,
         type: data.type,
-        quantity: data.quantity,
+        category: data.category,
+        quantity: Q_trans,
+        unit_price: data.category === 'PURCHASE' ? C_trans : 0, // Apenas compras registram preço de custo novo
         notes: data.notes || null,
+        financial_id: financialId,
         created_by: user.id
       }]);
       if (transactionError) throw transactionError;
 
-      // Update local item quantity inline
-      setInventoryItems(prev => prev.map(item => {
-        if (item.id === data.item_id) {
-          const change = data.type === 'IN' ? data.quantity : -data.quantity;
-          const newQty = Math.max(0, item.quantity + change);
-          
-          // Background update to DB
-          sb.from('inventory_items').update({ quantity: newQty, updated_at: new Date().toISOString() }).eq('id', item.id).then();
-          
-          return { ...item, quantity: newQty };
-        }
-        return item;
-      }));
+      // --- 3. Atualizar Item Principal ---
+      const { error: updateError } = await sb.from('inventory_items').update({ 
+        quantity: newQty, 
+        unit_cost: newAvgCost,
+        updated_at: new Date().toISOString() 
+      }).eq('id', item.id);
+      
+      if (updateError) throw updateError;
+
+      setInventoryItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: newQty, unit_cost: newAvgCost } : i));
+      
+      if (data.category === 'PURCHASE' && C_trans > 0) {
+        fetchData(); 
+      }
     } catch (error) {
       console.error('Error adding transaction:', error);
       throw error;
+    }
+  };
+
+  const handleDeleteInventoryTransaction = async (transactionId: string) => {
+    const sb = getClientSupabase();
+    if (!sb || !user) return;
+    try {
+      const { data: transaction, error: tError } = await (sb as any)
+        .from('inventory_transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .single();
+      
+      if (tError || !transaction) throw new Error('Transação não encontrada.');
+
+      const item = inventoryItems.find(i => i.id === (transaction as any).item_id);
+      if (!item) throw new Error('Item de estoque não encontrado.');
+
+      let newQty = Number(item.quantity);
+      let newAvgCost = Number(item.unit_cost || 0);
+
+      const Q_curr = Number(item.quantity);
+      const C_curr = Number(item.unit_cost || 0);
+      const Q_trans = Number((transaction as any).quantity);
+      const C_trans = Number((transaction as any).unit_price || 0);
+
+      if ((transaction as any).type === 'IN') {
+        const Q_old = Q_curr - Q_trans;
+        if (Q_old > 0) {
+          newAvgCost = ((Q_curr * C_curr) - (Q_trans * C_trans)) / Q_old;
+        } else {
+          newAvgCost = 0;
+        }
+        newQty = Math.max(0, Q_old);
+
+        if ((transaction as any).financial_id) {
+          await (sb as any).from('financial_transactions').delete().eq('id', (transaction as any).financial_id);
+        }
+      } else {
+        newQty = Q_curr + Q_trans;
+      }
+
+      // 4. Mark the inventory transaction as reversed (instead of deletion for audit)
+      const { error: markError } = await (sb as any)
+        .from('inventory_transactions')
+        .update({ 
+          is_reversed: true, 
+          reversed_at: new Date().toISOString() 
+        })
+        .eq('id', transactionId);
+      
+      if (markError) throw markError;
+
+      const { error: updateError } = await sb.from('inventory_items').update({ 
+        quantity: newQty, 
+        unit_cost: Math.max(0, newAvgCost),
+        updated_at: new Date().toISOString() 
+      }).eq('id', item.id);
+      if (updateError) throw updateError;
+
+      setInventoryItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: newQty, unit_cost: Math.max(0, newAvgCost) } : i));
+      
+      addNotification('Estorno Realizado', 'A movimentação foi desfeita e os custos recalculados.', 'success');
+      fetchData(); 
+    } catch (error: any) {
+      console.error('Error deleting inventory transaction:', error);
+      addNotification('Erro no Estorno', error.message, 'error');
+    }
+  };
+  const handleFetchInventoryHistory = async (itemId: string) => {
+    const sb = getClientSupabase();
+    if (!sb) return [];
+    try {
+      const { data, error } = await (sb as any)
+        .from('inventory_transactions')
+        .select('*')
+        .eq('item_id', itemId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching inventory history:', error);
+      return [];
     }
   };
 
@@ -1199,15 +1338,15 @@ export default function Home() {
           />
         );
       case 'inventory':
-        return (
-          <InventoryView
-            user={user}
-            items={inventoryItems}
-            onSaveItem={handleSaveInventoryItem}
-            onDeleteItem={handleDeleteInventoryItem}
-            onAddTransaction={handleAddInventoryTransaction}
-          />
-        );
+        return <InventoryView 
+          items={inventoryItems}
+          onSaveItem={handleSaveInventoryItem}
+          onDeleteItem={handleDeleteInventoryItem}
+          onAddTransaction={handleAddInventoryTransaction}
+          onDeleteTransaction={handleDeleteInventoryTransaction}
+          onFetchHistory={handleFetchInventoryHistory}
+          user={user}
+        />;
       case 'financial':
         return (
           <FinancialView 
