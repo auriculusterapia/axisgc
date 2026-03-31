@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Bell, HelpCircle, User as UserIcon, LogOut, Check, AlertCircle, X } from 'lucide-react';
+import { Search, Bell, HelpCircle, User as UserIcon, LogOut, Check, AlertCircle, X, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { User, ROLE_LABELS } from '@/types/auth';
 import { getInitials } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -12,6 +12,8 @@ interface TopBarProps {
   notifications?: any[];
   onMarkAsRead?: (id: string) => void;
   onClearAll?: () => void;
+  connectionStatus?: 'online' | 'offline' | 'reconnecting';
+  onRefreshConnection?: () => void;
 }
 
 export default function TopBar({ 
@@ -19,7 +21,9 @@ export default function TopBar({
   onLogout,
   notifications = [],
   onMarkAsRead,
-  onClearAll
+  onClearAll,
+  connectionStatus = 'online',
+  onRefreshConnection
 }: TopBarProps) {
   const [profileName, setProfileName] = useState(user?.name || 'Dr. Elena Wu');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -57,6 +61,31 @@ export default function TopBar({
       </div>
 
       <div className="flex items-center gap-4">
+        {/* Connection Status Indicator */}
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-500 ${
+          connectionStatus === 'online' ? 'bg-emerald-50 text-emerald-600' :
+          connectionStatus === 'offline' ? 'bg-rose-50 text-rose-600 animate-pulse' :
+          'bg-amber-50 text-amber-600'
+        }`}>
+          {connectionStatus === 'online' ? <Wifi size={14} /> : 
+           connectionStatus === 'offline' ? <WifiOff size={14} /> : 
+           <RefreshCw size={14} className="animate-spin" />}
+          <span className="hidden sm:inline">
+            {connectionStatus === 'online' ? 'Sistema Online' : 
+             connectionStatus === 'offline' ? 'Sistema Offline' : 
+             'Reconectando...'}
+          </span>
+          {connectionStatus === 'offline' && (
+            <button 
+              onClick={onRefreshConnection}
+              className="ml-1 hover:bg-rose-100 p-0.5 rounded-full transition-colors"
+              title="Tentar reconectar"
+            >
+              <RefreshCw size={12} />
+            </button>
+          )}
+        </div>
+
         <div className="relative">
           <button 
             onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}

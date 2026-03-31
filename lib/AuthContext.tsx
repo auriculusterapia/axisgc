@@ -1,8 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from './supabase';
-import { User, UserRole, ADMIN_PERMISSIONS, ROLE_PERMISSIONS } from '@/types/auth';
+import { supabase, checkConnection, getSupabase } from './supabase';
+import { User, UserRole, ADMIN_PERMISSIONS } from '@/types/auth';
 import { logAction } from './auditLogService';
 
 interface AuthContextType {
@@ -11,6 +11,8 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password?: string) => Promise<void>;
   signOut: () => Promise<void>;
+  connectionStatus: 'online' | 'offline' | 'reconnecting';
+  refreshConnection: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,6 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'reconnecting'>('online');
 
   const fetchProfile = async (userId: string) => {
     if (!supabase) return;
@@ -123,8 +126,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    const handleFocus = async () => {
+      console.log('Tab focused, verifying session and connection...');
+      const isAlive = await checkConnection();
+      if (!isAlive) {
+        setConnectionStatus('offline');
+        // Tenta recuperar se estiver offline
+        setTimeout(() => refreshConnection(), 2000);
+      } else {
+        setConnectionStatus('online');
+      }
+      
+      const client = getSupabase();
+      if (client) {
+        const { data: { session: currentSession } } = await client.auth.getSession();
+        if (currentSession && !session) {
+          setSession(currentSession);
+          await fetchProfile(currentSession.user.id);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', () => {
+       console.log('Browser is online');
+       refreshConnection();
+    });
+    window.addEventListener('offline', () => {
+       console.log('Browser is offline');
+       setConnectionStatus('offline');
+    });
+
+    // Heartbeat a cada 2 minutos
+    const heartbeat = setInterval(async () => {
+      const isAlive = await checkConnection();
+      setConnectionStatus(isAlive ? 'online' : 'offline');
+    }, 120000);
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', () => refreshConnection());
+      window.removeEventListener('offline', () => setConnectionStatus('offline'));
+      clearInterval(heartbeat);
+    };
+  }, [session]);
+
+  const refreshConnection = async () => {
+    setConnectionStatus('reconnecting');
+    const isAlive = await checkConnection();
+    if (isAlive) {
+      setConnectionStatus('online');
+    } else {
+      // Força recriação do cliente se falhar o check inicial
+      getSupabase(true);
+      const retryAlive = await checkConnection();
+      setConnectionStatus(retryAlive ? 'online' : 'offline');
+    }
+  };
 
   const signIn = async (email: string, password?: string) => {
     if (!supabase) throw new Error('Supabase client not initialized');
@@ -164,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signOut, connectionStatus, refreshConnection }}>
       {children}
     </AuthContext.Provider>
   );

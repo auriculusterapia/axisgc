@@ -75,7 +75,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase, getClientSupabase } from '@/lib/supabase';
 
 export default function Home() {
-  const { user, signOut, loading: authLoading } = useAuth();
+  const { user, signOut, loading: authLoading, connectionStatus, refreshConnection } = useAuth();
   const [activeView, setActiveView] = useState('dashboard');
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>(undefined);
@@ -182,7 +182,14 @@ export default function Home() {
         setIsNotificationsEnabled(JSON.parse(e.newValue));
       }
     });
-  }, [activeView]);
+
+    // Notify user about connection status changes
+    if (connectionStatus === 'offline') {
+      addNotification('Conexão Perdida', 'Você está offline. Algumas ações podem falhar.', 'error');
+    } else if (connectionStatus === 'online' && notifications[0]?.title === 'Conexão Perdida') {
+      addNotification('Conexão Restabelecida', 'O sistema está online novamente.', 'success');
+    }
+  }, [activeView, connectionStatus]);
 
   useEffect(() => {
     localStorage.setItem('axis_notifications_history', JSON.stringify(notifications));
@@ -1205,6 +1212,8 @@ export default function Home() {
             notifications={notifications}
             onMarkAsRead={markNotificationAsRead}
             onClearAll={clearAllNotifications}
+            connectionStatus={connectionStatus}
+            onRefreshConnection={refreshConnection}
           />
         </div>
         
