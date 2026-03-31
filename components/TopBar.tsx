@@ -31,18 +31,8 @@ export default function TopBar({
   const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('auriculocare_profile');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.name) {
-            setProfileName(parsed.name);
-          }
-        } catch (e) {}
-      } else if (user?.name) {
-        setProfileName(user.name);
-      }
+    if (user?.name) {
+      setProfileName(user.name);
     }
   }, [user]);
 

@@ -151,6 +151,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'dashboard', 'dashboard:view', 
     'patients', 'patients:view', 'patients:create',
     'calendar', 'calendar:view', 'calendar:create', 'calendar:edit',
+    'inventory', 'inventory:view', 'inventory:create', 'inventory:edit',
     'settings', 'settings:profile'
   ],
 };

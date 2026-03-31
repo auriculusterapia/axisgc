@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, checkConnection, getSupabase } from './supabase';
-import { User, UserRole, ADMIN_PERMISSIONS } from '@/types/auth';
+import { User, UserRole, ADMIN_PERMISSIONS, ROLE_PERMISSIONS } from '@/types/auth';
 import { logAction } from './auditLogService';
 
 interface AuthContextType {
@@ -32,20 +32,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (error) {
-      console.error('Error fetching profile:', error);
-      // Fallback to session data if profile fetch fails (e.g. trigger didn't run)
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session && session.user.id === userId) {
-        const role = (session.user.user_metadata?.role as UserRole) || 'PROFESSIONAL';
-        const isAdmin = role === 'ADMIN';
-        
+      console.warn('Profile fetch failed, using fallback:', error.message);
+      // Fallback robusto usando ROLE_PERMISSIONS[role]
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (currentSession && currentSession.user.id === userId) {
+        const role = (currentSession.user.user_metadata?.role as UserRole) || 'PROFESSIONAL';
         const fallbackUser: User = {
-          id: session.user.id,
-          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Usuário',
-          email: session.user.email || '',
+          id: currentSession.user.id,
+          name: currentSession.user.user_metadata?.name || currentSession.user.email?.split('@')[0] || 'Usuário',
+          email: currentSession.user.email || '',
           role: role,
-          avatar: `https://picsum.photos/seed/${session.user.id}/200/200`,
-          permissions: isAdmin ? ADMIN_PERMISSIONS : [],
+          avatar: `https://picsum.photos/seed/${currentSession.user.id}/200/200`,
+          permissions: (ROLE_PERMISSIONS as any)[role] || [],
         };
         setUser(fallbackUser);
       }
@@ -53,16 +51,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (data) {
-      console.log('Profile data fetched:', data);
       const role = data.role as UserRole;
       const isAdmin = role === 'ADMIN';
       
-      // ADMINs sempre recebem todas as permissões; outros recebem as do perfil
       const finalPermissions = isAdmin 
         ? ADMIN_PERMISSIONS 
-        : Array.isArray(data.permissions)
+        : Array.isArray(data.permissions) && data.permissions.length > 0
           ? data.permissions
-          : [];
+          : (ROLE_PERMISSIONS as any)[role] || [];
       
       const userData: User = {
         id: data.id,
@@ -72,105 +68,89 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         avatar: data.avatar_url || undefined,
         permissions: finalPermissions,
       };
-      console.log('User data set in context:', userData);
       setUser(userData);
     }
   };
 
   useEffect(() => {
-    const checkSession = async () => {
+    let mounted = true;
+
+    const initAuth = async () => {
       if (!supabase) {
-        setLoading(false);
+        if (mounted) setLoading(false);
         return;
       }
-      try {
-        // Check active sessions and sets the user
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Session check error:', error);
-          // If refresh token is invalid, clear everything
-          if (error.message.includes('Refresh Token Not Found') || error.message.includes('invalid_grant')) {
-            await supabase.auth.signOut();
-            setSession(null);
-            setUser(null);
-          }
-        } else {
-          setSession(session);
-          if (session) {
-            await fetchProfile(session.user.id);
-          }
+
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      if (mounted) {
+        setSession(initialSession);
+        if (initialSession) {
+          await fetchProfile(initialSession.user.id);
         }
-      } catch (err) {
-        console.error('Unexpected session check error:', err);
-      } finally {
         setLoading(false);
       }
     };
 
-    checkSession();
+    initAuth();
 
     if (!supabase) return;
 
-    // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-      if (session) {
-        if (event === 'SIGNED_IN') {
-          logAction({ action: 'LOGIN', entityType: 'AUTH', userId: session.user.id, details: { method: 'email' } });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      console.log('Auth event change:', event);
+      if (mounted) {
+        setSession(currentSession);
+        if (currentSession) {
+          if (event === 'SIGNED_IN') {
+            logAction({ action: 'LOGIN', entityType: 'AUTH', userId: currentSession.user.id, details: { method: 'email' } });
+          }
+          await fetchProfile(currentSession.user.id);
+        } else {
+          setUser(null);
         }
-        await fetchProfile(session.user.id);
-      } else {
-        setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     const handleFocus = async () => {
-      console.log('Tab focused, verifying session and connection...');
       const isAlive = await checkConnection();
       if (!isAlive) {
-        setConnectionStatus('offline');
-        // Tenta recuperar se estiver offline
+        if (mounted) setConnectionStatus('offline');
         setTimeout(() => refreshConnection(), 2000);
       } else {
-        setConnectionStatus('online');
-      }
-      
-      const client = getSupabase();
-      if (client) {
-        const { data: { session: currentSession } } = await client.auth.getSession();
-        if (currentSession && !session) {
-          setSession(currentSession);
-          await fetchProfile(currentSession.user.id);
+        if (mounted) setConnectionStatus('online');
+        
+        const client = getSupabase();
+        if (client) {
+          const { data: { session: focusedSession } } = await client.auth.getSession();
+          if (focusedSession && mounted) {
+            setSession(focusedSession);
+            // Só busca o perfil se ainda não tivermos ele ou se for uma nova sessão
+            if (!user || user.id !== focusedSession.user.id) {
+               await fetchProfile(focusedSession.user.id);
+            }
+          }
         }
       }
     };
 
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('online', () => {
-       console.log('Browser is online');
-       refreshConnection();
-    });
-    window.addEventListener('offline', () => {
-       console.log('Browser is offline');
-       setConnectionStatus('offline');
-    });
+    window.addEventListener('online', refreshConnection);
+    window.addEventListener('offline', () => mounted && setConnectionStatus('offline'));
 
-    // Heartbeat a cada 2 minutos
     const heartbeat = setInterval(async () => {
       const isAlive = await checkConnection();
-      setConnectionStatus(isAlive ? 'online' : 'offline');
+      if (mounted) setConnectionStatus(isAlive ? 'online' : 'offline');
     }, 120000);
 
     return () => {
+      mounted = false;
       if (subscription) subscription.unsubscribe();
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('online', () => refreshConnection());
+      window.removeEventListener('online', refreshConnection);
       window.removeEventListener('offline', () => setConnectionStatus('offline'));
       clearInterval(heartbeat);
     };
-  }, [session]);
+  }, []);
 
   const refreshConnection = async () => {
     setConnectionStatus('reconnecting');
