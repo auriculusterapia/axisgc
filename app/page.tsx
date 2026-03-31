@@ -1199,7 +1199,7 @@ export default function Home() {
           activeView={activeView} 
           setActiveView={handleViewChange} 
           onNewAppointment={handleNewAppointment} 
-          onLogout={signOut} 
+          onLogout={handleLogout} 
           user={user}
         />
       </div>
