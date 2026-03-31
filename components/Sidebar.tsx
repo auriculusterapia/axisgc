@@ -96,10 +96,6 @@ export default function Sidebar({ activeView, setActiveView, onNewAppointment, o
       </nav>
 
       <div className="p-4 mt-auto">
-        <div className="bg-primary/5 p-4 rounded-2xl mb-4">
-          <p className="text-xs font-bold text-primary mb-1">Upgrade Pro</p>
-          <p className="text-[10px] text-on-surface-variant leading-relaxed">Acesse ferramentas avançadas de mapeamento e IA.</p>
-        </div>
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3 p-3 bg-surface-container-low rounded-xl">

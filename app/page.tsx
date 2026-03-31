@@ -120,7 +120,7 @@ export default function Home() {
     if (!isNotificationsEnabled) return;
     
     const newNotif = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       title,
       message,
       type,
