@@ -331,7 +331,7 @@ export default function FinancialView({
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 md:p-10 space-y-8 overflow-y-auto h-full">
+    <div className="p-10 space-y-10 relative">
 
       {/* Header */}
       <section className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">

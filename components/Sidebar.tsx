@@ -56,7 +56,7 @@ export default function Sidebar({ activeView, setActiveView, onNewAppointment, o
   });
 
   return (
-    <aside className="w-64 flex flex-col bg-white border-r border-outline-variant/20 z-50 h-screen sticky top-0">
+    <aside className="w-64 flex flex-col bg-white border-r border-outline-variant/20 z-50 min-h-screen">
       <div className="p-6 flex flex-col gap-1">
         <div className="flex items-center gap-4 px-6 mb-10">
           <div className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center font-bold text-xl shadow-lg shadow-primary/30 shrink-0">

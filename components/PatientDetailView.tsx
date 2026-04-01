@@ -162,7 +162,7 @@ export default function PatientDetailView({
   };
 
   return (
-    <div className="p-10 space-y-10 overflow-y-auto h-full">
+    <div className="p-10 space-y-10 relative">
       {/* Patient Header */}
       <section className="flex flex-col md:flex-row gap-8 items-start justify-between">
         <div className="flex gap-8 items-center">

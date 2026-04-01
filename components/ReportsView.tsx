@@ -330,7 +330,7 @@ export default function ReportsView({
   };
 
   return (
-    <div className="p-6 md:p-10 space-y-8 overflow-y-auto h-full max-w-7xl mx-auto">
+    <div className="p-6 md:p-10 space-y-8 relative max-w-7xl mx-auto">
       {/* Header Section */}
       <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>

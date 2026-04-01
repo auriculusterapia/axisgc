@@ -148,7 +148,7 @@ export default function AuditLogsView({ user }: AuditLogsViewProps) {
   }
 
   return (
-    <div className="p-10 space-y-8 overflow-y-auto h-full max-w-7xl mx-auto">
+    <div className="p-10 space-y-8 relative max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h2 className="text-4xl font-bold font-headline text-on-surface">Auditoria de Sistema</h2>

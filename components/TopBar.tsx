@@ -37,7 +37,7 @@ export default function TopBar({
   }, [user]);
 
   return (
-    <header className="h-20 flex items-center justify-between px-8 bg-white/80 backdrop-blur-md border-b border-outline-variant/10 sticky top-0 z-40">
+    <header className="h-20 flex items-center justify-between px-8 bg-white border-b border-outline-variant/10 z-40">
       <div className="flex items-center gap-8 w-1/2">
         <span className="text-lg font-bold text-primary font-headline">Axis GC</span>
         <div className="relative w-full max-w-md">

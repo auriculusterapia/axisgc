@@ -334,7 +334,7 @@ export default function UsersManagementView({ user }: UsersManagementViewProps) 
   };
 
   return (
-    <div className="p-10 space-y-10 overflow-y-auto h-full max-w-6xl mx-auto">
+    <div className="p-10 space-y-8 relative max-w-6xl mx-auto">
       {generalError && (
         <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-between gap-3 text-rose-600 text-sm font-medium animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-3">

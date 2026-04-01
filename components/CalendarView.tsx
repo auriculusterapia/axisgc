@@ -327,7 +327,7 @@ export default function CalendarView({
   };
 
   return (
-    <div className="p-10 h-full flex flex-col space-y-8 overflow-hidden">
+    <div className="p-10 relative flex flex-col space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

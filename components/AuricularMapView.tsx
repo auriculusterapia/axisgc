@@ -38,7 +38,7 @@ export default function AuricularMapView({ user }: { user?: User | null }) {
   const canDelete = user?.permissions.includes('auricular:delete') || user?.role === 'ADMIN';
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex relative">
       {/* Left Panel: Interactive Map */}
       <section className="flex-1 p-10 overflow-y-auto bg-surface relative">
         <div className="mb-10 flex justify-between items-end">

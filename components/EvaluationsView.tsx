@@ -447,7 +447,7 @@ export default function EvaluationsView({
   });
 
   return (
-    <div className="p-10 space-y-10 overflow-y-auto h-full relative">
+    <div className="p-10 space-y-10 relative">
       {/* Header */}
       <section className="flex flex-col md:flex-row gap-8 items-start justify-between">
         <div>

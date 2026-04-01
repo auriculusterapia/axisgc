@@ -414,7 +414,7 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
   }
 
   return (
-    <div className="p-10 space-y-10 overflow-y-auto h-full max-w-5xl mx-auto relative">
+    <div className="p-10 space-y-10 relative max-w-5xl mx-auto relative">
       {/* Header */}
       <section>
         <h2 className="text-4xl font-bold font-headline text-on-surface">Configurações</h2>
