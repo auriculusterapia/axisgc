@@ -93,8 +93,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let lastFocusCheck = 0;
 
     const initAuth = async () => {
+      // Safety timeout: force stop loading after 8s if it hangs
+      const safetyTimeout = setTimeout(() => {
+        if (mounted && loading) {
+          console.warn('Auth initialization reached safety timeout. Forcing loading to false.');
+          setLoading(false);
+        }
+      }, 8000);
+
       if (!supabase) {
         if (mounted) setLoading(false);
+        clearTimeout(safetyTimeout);
         return;
       }
 
@@ -109,7 +118,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('Error during initAuth:', error);
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          clearTimeout(safetyTimeout);
+        }
       }
     };
 

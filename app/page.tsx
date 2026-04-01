@@ -462,11 +462,66 @@ export default function Home() {
     }
   }, [user, editingPatient, selectedPatient, setPatients, setSelectedPatient, setIsPatientModalOpen, setEditingPatient]);
 
+  const [isSlowLoading, setIsSlowLoading] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (authLoading) setIsSlowLoading(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [authLoading]);
+
   if (authLoading) return (
-    <div className="flex items-center justify-center min-h-screen bg-surface">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-on-surface-variant font-medium">Carregando...</p>
+    <div className="flex items-center justify-center min-h-screen bg-surface px-6">
+      <div className="flex flex-col items-center gap-6 text-center max-w-sm">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          {isSlowLoading && (
+            <motion.div 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute -top-2 -right-2 w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center border-2 border-white"
+            >
+              <AlertCircle size={14} />
+            </motion.div>
+          )}
+        </div>
+        
+        <div className="space-y-2">
+          <p className="text-on-surface font-bold text-xl">
+            {isSlowLoading ? 'Conexão Instável' : 'Carregando...'}
+          </p>
+          <p className="text-on-surface-variant text-sm">
+            {isSlowLoading 
+              ? 'A autenticação está demorando mais que o esperado. Verifique sua internet.' 
+              : 'Preparando seu ambiente de trabalho...'}
+          </p>
+        </div>
+
+        {isSlowLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col gap-3 w-full pt-4"
+          >
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+            >
+              Recarregar Página
+            </button>
+            <button 
+              onClick={() => {
+                // Forçar limpeza de sessão local se estiver travado
+                localStorage.clear();
+                window.location.href = '/';
+              }}
+              className="px-6 py-3 bg-surface border border-outline-variant text-on-surface-variant rounded-2xl font-medium text-sm"
+            >
+              Limpar Cache e Sair
+            </button>
+          </motion.div>
+        )}
       </div>
     </div>
   );
