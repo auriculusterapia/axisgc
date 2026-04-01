@@ -485,6 +485,40 @@ export default function FinancialView({
         </div>
       </section>
 
+      {/* Pending appointments - Recem Movido para cá */}
+      {appointments.filter(a => a.paymentStatus === 'pendente').length > 0 && (
+        <motion.section 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-amber-50/40 rounded-[2.5rem] border border-amber-100 shadow-sm p-8"
+        >
+          <p className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-6 flex items-center gap-2">
+            <AlertTriangle size={16} /> Sessões a Receber
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {appointments.filter(a => a.paymentStatus === 'pendente').slice(0, 6).map(a => (
+              <div key={a.id} className="flex items-center justify-between bg-white rounded-2xl px-6 py-4 border border-amber-100 shadow-sm hover:shadow-md transition-all group">
+                <div>
+                  <p className="font-bold text-on-surface text-sm">{a.patientName}</p>
+                  <p className="text-[10px] text-outline mt-0.5">{formatDate(a.date)}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="font-black text-amber-700">{formatCurrency(a.price || 0)}</span>
+                  {canCreate && (
+                    <button onClick={() => handleConfirmPayment(a.id)}
+                      className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
+                      title="Confirmar Pagamento"
+                    >
+                      <Check size={18} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.section>
+      )}
+
       {/* Transaction Table */}
       <section className="bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm overflow-hidden">
         <div className="px-8 py-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-outline-variant/10 bg-surface-container-low/30">
@@ -582,34 +616,6 @@ export default function FinancialView({
             )}
           </table>
         </div>
-
-        {/* Pending appointments */}
-        {appointments.filter(a => a.paymentStatus === 'pendente').length > 0 && (
-          <div className="px-8 py-6 border-t border-outline-variant/10 bg-amber-50/40">
-            <p className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <AlertTriangle size={14} /> Sessões a Receber
-            </p>
-            <div className="space-y-2">
-              {appointments.filter(a => a.paymentStatus === 'pendente').slice(0, 5).map(a => (
-                <div key={a.id} className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-amber-100">
-                  <div>
-                    <p className="font-bold text-sm text-on-surface">{a.patientName}</p>
-                    <p className="text-xs text-outline">{formatDate(a.date)}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-extrabold text-amber-700">{formatCurrency(a.price || 0)}</span>
-                    {canCreate && (
-                      <button onClick={() => handleConfirmPayment(a.id)}
-                        className="text-[10px] font-bold bg-emerald-500 text-white px-3 py-1.5 rounded-xl hover:bg-emerald-600 transition-all flex items-center gap-1">
-                        <Check size={12} /> Confirmar
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </section>
 
       {/* Launch Modal */}
