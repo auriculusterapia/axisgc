@@ -25,55 +25,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     if (!supabase) return;
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    
+    // Timer para evitar travamento infinito no carregamento do perfil
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout ao buscar perfil')), 5000)
+    );
 
-    if (error) {
-      console.warn('Profile fetch failed, using fallback:', error.message);
-      // Fallback robusto usando ROLE_PERMISSIONS[role]
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (currentSession && currentSession.user.id === userId) {
-        const role = (currentSession.user.user_metadata?.role as UserRole) || 'PROFESSIONAL';
-        const fallbackUser: User = {
-          id: currentSession.user.id,
-          name: currentSession.user.user_metadata?.name || currentSession.user.email?.split('@')[0] || 'Usuário',
-          email: currentSession.user.email || '',
-          role: role,
-          avatar: `https://picsum.photos/seed/${currentSession.user.id}/200/200`,
-          permissions: (ROLE_PERMISSIONS as any)[role] || [],
-        };
-        setUser(fallbackUser);
+    try {
+      const fetchPromise = supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
+      if (error) {
+        throw error;
       }
-      return;
-    }
 
-    if (data) {
-      const role = data.role as UserRole;
-      const isAdmin = role === 'ADMIN';
+      if (data) {
+        const role = data.role as UserRole;
+        const isAdmin = role === 'ADMIN';
+        
+        const finalPermissions = isAdmin 
+          ? ADMIN_PERMISSIONS 
+          : Array.isArray(data.permissions) && data.permissions.length > 0
+            ? data.permissions
+            : (ROLE_PERMISSIONS as any)[role] || [];
+        
+        const userData: User = {
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          role: role,
+          avatar: data.avatar_url || undefined,
+          permissions: finalPermissions,
+        };
+        setUser(userData);
+      }
+    } catch (error: any) {
+      console.warn('Profile fetch failed or timed out, using fallback:', error.message);
       
-      const finalPermissions = isAdmin 
-        ? ADMIN_PERMISSIONS 
-        : Array.isArray(data.permissions) && data.permissions.length > 0
-          ? data.permissions
-          : (ROLE_PERMISSIONS as any)[role] || [];
-      
-      const userData: User = {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        role: role,
-        avatar: data.avatar_url || undefined,
-        permissions: finalPermissions,
-      };
-      setUser(userData);
+      // Fallback robusto usando metadados da sessão local se o DB estiver inacessível
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (currentSession && currentSession.user.id === userId) {
+          const role = (currentSession.user.user_metadata?.role as UserRole) || 'PROFESSIONAL';
+          const fallbackUser: User = {
+            id: currentSession.user.id,
+            name: currentSession.user.user_metadata?.name || currentSession.user.email?.split('@')[0] || 'Usuário',
+            email: currentSession.user.email || '',
+            role: role,
+            avatar: `https://picsum.photos/seed/${currentSession.user.id}/200/200`,
+            permissions: (ROLE_PERMISSIONS as any)[role] || [],
+          };
+          setUser(fallbackUser);
+        }
+      } catch (fallbackError) {
+        console.error('Critical: Fallback auth also failed:', fallbackError);
+      }
     }
   };
 
   useEffect(() => {
     let mounted = true;
+    let lastFocusCheck = 0;
 
     const initAuth = async () => {
       if (!supabase) {
@@ -81,13 +98,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const { data: { session: initialSession } } = await supabase.auth.getSession();
-      if (mounted) {
-        setSession(initialSession);
-        if (initialSession) {
-          await fetchProfile(initialSession.user.id);
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        if (mounted) {
+          setSession(initialSession);
+          if (initialSession) {
+            await fetchProfile(initialSession.user.id);
+          }
         }
-        setLoading(false);
+      } catch (error) {
+        console.error('Error during initAuth:', error);
+      } finally {
+        if (mounted) setLoading(false);
       }
     };
 
@@ -97,7 +119,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       console.log('Auth event change:', event);
-      if (mounted) {
+      if (!mounted) return;
+
+      try {
         setSession(currentSession);
         if (currentSession) {
           if (event === 'SIGNED_IN') {
@@ -107,16 +131,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUser(null);
         }
-        setLoading(false);
+      } catch (error) {
+        console.error('Error in onAuthStateChange handler:', error);
+      } finally {
+        if (mounted) setLoading(false);
       }
     });
 
     const handleFocus = async () => {
-      const isAlive = await checkConnection();
-      if (!isAlive) {
-        if (mounted) setConnectionStatus('offline');
-        setTimeout(() => refreshConnection(), 2000);
-      } else {
+      // Debounce simples para evitar multiplas chamadas ao mudar de aba rapidamente
+      const now = Date.now();
+      if (now - lastFocusCheck < 5000) return; 
+      lastFocusCheck = now;
+
+      try {
+        const isAlive = await checkConnection();
+        if (!isAlive) {
+          if (mounted) setConnectionStatus('offline');
+          // Tenta reconectar após um tempo
+          setTimeout(() => mounted && refreshConnection(), 2000);
+          return;
+        }
+
         if (mounted) setConnectionStatus('online');
         
         const client = getSupabase();
@@ -130,6 +166,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
         }
+      } catch (error) {
+        console.warn('Error during focus check:', error);
       }
     };
 
@@ -138,8 +176,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('offline', () => mounted && setConnectionStatus('offline'));
 
     const heartbeat = setInterval(async () => {
-      const isAlive = await checkConnection();
-      if (mounted) setConnectionStatus(isAlive ? 'online' : 'offline');
+      try {
+        const isAlive = await checkConnection();
+        if (mounted) setConnectionStatus(isAlive ? 'online' : 'offline');
+      } catch (e) {
+        if (mounted) setConnectionStatus('offline');
+      }
     }, 120000);
 
     return () => {

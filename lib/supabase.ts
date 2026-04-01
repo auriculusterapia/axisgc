@@ -47,8 +47,18 @@ export const checkConnection = async (): Promise<boolean> => {
   
   try {
     // Tenta uma consulta mínima que não depende de permissões complexas (health check)
-    const { error } = await client.from('patients').select('id', { count: 'exact', head: true }).limit(1);
+    // Usamos 'profiles' com head: true para minimizar o tráfego e latência
+    const { error } = await client
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .limit(1);
+
     if (error) {
+      // Erros de RLS ainda significam que estamos "online"
+      if (error.code === 'PGRST301' || error.message.includes('permission denied')) {
+        return true;
+      }
+      
       console.warn('Conexão Supabase instável:', error.message);
       // Se for erro de rede ou timeout, retorna falso
       if (error.message.includes('fetch') || error.message.includes('timeout') || error.message.includes('Network')) {
