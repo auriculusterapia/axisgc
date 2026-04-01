@@ -20,6 +20,22 @@ function AgendaContent() {
   
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
 
+  const mapAppointmentFromDB = (app: any) => ({
+    id: app.id,
+    patientId: app.patient_id,
+    patientName: app.patient_name,
+    date: app.date,
+    time: app.time,
+    duration: app.duration,
+    type: app.type,
+    status: app.status,
+    price: app.price,
+    paymentStatus: app.payment_status,
+    notes: app.notes,
+    packageId: app.package_id,
+    isPackageSession: app.is_package_session
+  });
+
   const fetchData = useCallback(async () => {
     if (!supabase) return;
     setLoading(true);
@@ -38,7 +54,7 @@ function AgendaContent() {
       if (patsError) throw patsError;
       if (pkgsError) throw pkgsError;
 
-      if (appData) setAppointments(appData);
+      if (appData) setAppointments(appData.map(mapAppointmentFromDB));
       if (patsData) setPatients(patsData);
       if (pkgsData) setPackages(pkgsData);
     } catch (error) {
