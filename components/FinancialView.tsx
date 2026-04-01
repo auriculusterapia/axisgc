@@ -54,6 +54,12 @@ export default function FinancialView({
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'INCOME' | 'EXPENSE'>('all');
   const [timeRange, setTimeRange] = useState<'hoje' | '7d' | 'mes' | 'semestre' | 'ano'>('mes');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterType, timeRange]);
 
   const [formData, setFormData] = useState({
     description: '',
@@ -205,6 +211,18 @@ export default function FinancialView({
     filterType === 'all' ? allTransactions : allTransactions.filter(t => t.type === filterType),
     [allTransactions, filterType]
   );
+
+  const totalPagesCount = Math.ceil(filteredTransactions.length / itemsPerPage);
+  const paginatedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredTransactions.slice(start, start + itemsPerPage);
+  }, [filteredTransactions, currentPage, itemsPerPage]);
+
+  const paginationInfo = {
+    start: (currentPage - 1) * itemsPerPage + 1,
+    end: Math.min(currentPage * itemsPerPage, filteredTransactions.length),
+    total: filteredTransactions.length
+  };
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const openModal = (type: 'INCOME' | 'EXPENSE') => {
@@ -556,11 +574,11 @@ export default function FinancialView({
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/5">
-              {filteredTransactions.length === 0 ? (
+              {paginatedTransactions.length === 0 ? (
                 <tr><td colSpan={6} className="px-8 py-16 text-center text-outline italic opacity-60">
                   {isLoadingManual ? 'Carregando...' : 'Nenhuma transação encontrada.'}
                 </td></tr>
-              ) : filteredTransactions.map(t => (
+              ) : paginatedTransactions.map(t => (
                 <tr key={`${t.source}-${t.id}`} className="hover:bg-surface-container-low/40 transition-colors group">
                   <td className="px-8 py-4 text-sm font-medium text-outline">{formatDate(t.date)}</td>
                   <td className="px-8 py-4">
@@ -616,6 +634,65 @@ export default function FinancialView({
             )}
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        {filteredTransactions.length > 0 && (
+          <div className="px-8 py-4 border-t border-outline-variant/10 bg-surface-container-low/20 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-outline uppercase tracking-tight">Exibir:</span>
+                <select 
+                  value={itemsPerPage} 
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="bg-white border border-outline-variant/20 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-1 focus:ring-primary/20 cursor-pointer"
+                >
+                  {[10, 20, 50, 100].map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <span className="text-[10px] font-bold text-outline-variant uppercase tracking-widest hidden md:inline">
+                Mostrando {paginationInfo.start}-{paginationInfo.end} de {paginationInfo.total}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-xl border border-outline-variant/10 bg-white shadow-sm hover:bg-surface-container-low disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                title="Página Anterior"
+              >
+                <ChevronDown size={18} className="rotate-90" />
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPagesCount) }).map((_, i) => {
+                  // Lógica simples de exibição de números (primeiras 5 páginas)
+                  const pageNum = i + 1;
+                  const isActive = currentPage === pageNum;
+                  return (
+                    <button 
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${isActive ? 'bg-primary text-white shadow-md shadow-primary/20' : 'text-outline hover:bg-surface-container-low'}`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                {totalPagesCount > 5 && <span className="text-outline text-xs px-1">...</span>}
+              </div>
+
+              <button 
+                onClick={() => setCurrentPage(prev => Math.min(totalPagesCount, prev + 1))}
+                disabled={currentPage === totalPagesCount}
+                className="p-2 rounded-xl border border-outline-variant/10 bg-white shadow-sm hover:bg-surface-container-low disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                title="Próxima Página"
+              >
+                <ChevronDown size={18} className="-rotate-90" />
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Launch Modal */}
