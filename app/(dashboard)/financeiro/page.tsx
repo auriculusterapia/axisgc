@@ -12,6 +12,22 @@ export default function FinancialPage() {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const mapAppointmentFromDB = (app: any) => ({
+    id: app.id,
+    patientId: app.patient_id,
+    patientName: app.patient_name,
+    date: app.date,
+    time: app.time,
+    duration: app.duration,
+    type: app.type,
+    status: app.status,
+    price: app.price,
+    paymentStatus: app.payment_status,
+    notes: app.notes,
+    packageId: app.package_id,
+    isPackageSession: app.is_package_session
+  });
+
   const fetchData = useCallback(async () => {
     if (!supabase) return;
     setLoading(true);
@@ -22,7 +38,7 @@ export default function FinancialPage() {
         .order('date', { ascending: false });
       
       if (error) throw error;
-      if (data) setAppointments(data);
+      if (data) setAppointments(data.map(mapAppointmentFromDB));
     } catch (error) {
       console.error('Erro ao buscar dados financeiros:', error);
     } finally {

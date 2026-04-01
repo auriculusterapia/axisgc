@@ -16,9 +16,39 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const mapAppointmentFromDB = (app: any) => ({
+      id: app.id,
+      patientId: app.patient_id,
+      patientName: app.patient_name,
+      date: app.date,
+      time: app.time,
+      duration: app.duration,
+      type: app.type,
+      status: app.status,
+      price: app.price,
+      paymentStatus: app.payment_status,
+      notes: app.notes,
+      packageId: app.package_id,
+      isPackageSession: app.is_package_session
+    });
+
+    const mapPatientFromDB = (p: any) => ({
+      ...p,
+      maritalStatus: p.marital_status || 'Solteiro(a)',
+      avatar: p.avatar_url || '',
+      lastVisit: p.last_visit || 'N/A'
+    });
+
+    const mapEvaluationFromDB = (e: any) => ({
+      ...(e.data as any),
+      id: e.id,
+      patientId: e.patient_id,
+      date: e.date
+    });
+
     async function fetchData() {
       if (!supabase || !user) return;
-      
+      setLoading(true);
       try {
         const [
           { data: appointmentsData },
@@ -30,9 +60,9 @@ export default function DashboardPage() {
           supabase.from('evaluations').select('*')
         ]);
 
-        if (appointmentsData) setAppointments(appointmentsData);
-        if (patientsData) setPatients(patientsData);
-        if (evaluationsData) setEvaluations(evaluationsData);
+        if (appointmentsData) setAppointments(appointmentsData.map(mapAppointmentFromDB));
+        if (patientsData) setPatients(patientsData.map(mapPatientFromDB));
+        if (evaluationsData) setEvaluations(evaluationsData.map(mapEvaluationFromDB));
       } catch (error) {
         console.error('Erro ao buscar dados do dashboard:', error);
       } finally {
