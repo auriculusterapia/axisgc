@@ -39,18 +39,28 @@ export default function ReportsView({
   
   const filteredData = useMemo(() => {
     const now = new Date();
-    let startDate = new Date(0); // Epoch
+    let startDate = new Date(0);
 
     if (timeRange === 'mes') startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     else if (timeRange === 'trimestre') startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
     else if (timeRange === 'ano') startDate = new Date(now.getFullYear(), 0, 1);
 
-    const filterByDate = (item: any) => new Date(item.date || item.created_at || item.created_at) >= startDate;
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    const filterByDateStr = (dateStr: string) => {
+      if (!dateStr) return false;
+      if (timeRange === 'tudo') return true;
+      const ds = dateStr.substring(0, 10);
+      return ds >= startDateStr;
+    };
 
     return {
-      patients: patients.filter(p => new Date(p.created_at) >= startDate),
-      appointments: appointments.filter(a => new Date(a.date) >= startDate),
-      transactions: financialTransactions.filter(t => new Date(t.date) >= startDate)
+      patients: patients.filter(p => {
+        const d = p.created_at || p.date;
+        return filterByDateStr(d);
+      }),
+      appointments: appointments.filter(a => filterByDateStr(a.date)),
+      transactions: financialTransactions.filter(t => filterByDateStr(t.date))
     };
   }, [timeRange, patients, appointments, financialTransactions]);
 
@@ -58,20 +68,25 @@ export default function ReportsView({
   
   const metrics = useMemo(() => {
     const revenue = filteredData.appointments
-      .filter(a => a.payment_status === 'pago')
-      .reduce((s, a) => s + (a.price || 0), 0) +
+      .filter(a => (a.paymentStatus === 'pago' || a.payment_status === 'pago'))
+      .reduce((s, a) => s + Number(a.price || 0), 0) +
       filteredData.transactions
       .filter(t => t.type === 'INCOME')
-      .reduce((s, t) => s + (t.amount || 0), 0);
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
+
+    const pendingRevenue = filteredData.appointments
+      .filter(a => (a.paymentStatus === 'pendente' || a.payment_status === 'pendente'))
+      .reduce((s, a) => s + Number(a.price || 0), 0);
 
     const expenses = filteredData.transactions
       .filter(t => t.type === 'EXPENSE')
-      .reduce((s, t) => s + (t.amount || 0), 0);
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
 
     const avgTicket = filteredData.appointments.length > 0 ? revenue / filteredData.appointments.length : 0;
 
     return {
       revenue,
+      pendingRevenue,
       expenses,
       profit: revenue - expenses,
       newPatients: filteredData.patients.length,
@@ -88,18 +103,22 @@ export default function ReportsView({
     
     // Process appointments
     filteredData.appointments.forEach(a => {
-      if (a.payment_status !== 'pago') return;
-      const m = new Date(a.date).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+      const status = a.paymentStatus || a.payment_status;
+      if (status !== 'pago') return;
+      const dateStr = a.date || a.created_at;
+      const d = new Date(dateStr + (dateStr.length === 10 ? 'T12:00:00' : ''));
+      const m = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
       if (!months[m]) months[m] = { month: m, receita: 0, despesa: 0 };
-      months[m].receita += (a.price || 0);
+      months[m].receita += Number(a.price || 0);
     });
 
     // Process transactions
     filteredData.transactions.forEach(t => {
-      const m = new Date(t.date).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+      const d = new Date(t.date + (t.date.length === 10 ? 'T12:00:00' : ''));
+      const m = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
       if (!months[m]) months[m] = { month: m, receita: 0, despesa: 0 };
-      if (t.type === 'INCOME') months[m].receita += (t.amount || 0);
-      else months[m].despesa += (t.amount || 0);
+      if (t.type === 'INCOME') months[m].receita += Number(t.amount || 0);
+      else months[m].despesa += Number(t.amount || 0);
     });
 
     return Object.values(months).sort((a, b) => {
@@ -184,13 +203,17 @@ export default function ReportsView({
     setIsExporting(true);
     // Combine and sort ALL transactions by date
     const all = [
-      ...filteredData.appointments.filter(a => a.payment_status === 'pago').map(a => ({
-        date: a.date, type: 'ENTRADA', description: `Sessão: ${a.patient_name || 'Paciente'}`, amount: a.price || 0, category: a.type || 'Consulta'
+      ...filteredData.appointments.filter(a => a.paymentStatus === 'pago').map(a => ({
+        date: a.date, type: 'ENTRADA', description: `Sessão: ${a.patientName || 'Paciente'}`, amount: a.price || 0, category: a.type || 'Consulta'
       })),
       ...filteredData.transactions.map(t => ({
         date: t.date, type: t.type === 'INCOME' ? 'ENTRADA' : 'SAÍDA', description: t.description, amount: t.amount, category: t.category
       }))
-    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    ].sort((a, b) => {
+      const db = new Date(b.date + (b.date.length === 10 ? 'T12:00:00' : ''));
+      const da = new Date(a.date + (a.date.length === 10 ? 'T12:00:00' : ''));
+      return da.getTime() - db.getTime();
+    });
 
     let runningBalance = 0;
     const reportData = all.map(item => {
@@ -316,6 +339,7 @@ export default function ReportsView({
       head: [['Indicador', 'Resultado']],
       body: [
         ['Receita Total', metrics.revenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
+        ['A Receber (Proj.)', metrics.pendingRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
         ['Despesa Total', metrics.expenses.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
         ['Lucro Líquido', metrics.profit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
         ['Atendimentos', metrics.appointmentsCount.toString()],
@@ -379,7 +403,7 @@ export default function ReportsView({
       </section>
 
       {/* KPI Row */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
         <KPICard 
           title="Faturamento Bruto" 
           value={metrics.revenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} 
@@ -395,11 +419,18 @@ export default function ReportsView({
           color="primary"
         />
         <KPICard 
+          title="A Receber" 
+          value={metrics.pendingRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} 
+          subtitle="Agendamentos pendentes"
+          icon={Calendar}
+          color="amber"
+        />
+        <KPICard 
           title="Ticket Médio" 
           value={metrics.avgTicket.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} 
           subtitle="Valor por atendimento"
           icon={BarChart3}
-          color="amber"
+          color="indigo"
         />
         <KPICard 
           title="Lucro Líquido" 
@@ -613,6 +644,7 @@ function KPICard({ title, value, subtitle, icon: Icon, color }: any) {
     emerald: 'bg-emerald-50 text-emerald-600 icon-bg-emerald-100',
     amber: 'bg-amber-50 text-amber-600 icon-bg-amber-100',
     rose: 'bg-rose-50 text-rose-600 icon-bg-rose-100',
+    indigo: 'bg-indigo-50 text-indigo-600 icon-bg-indigo-100',
   };
 
   return (

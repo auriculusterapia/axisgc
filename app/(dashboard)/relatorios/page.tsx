@@ -24,15 +24,15 @@ export default function ReportsPage() {
         { data: finData },
         { data: invData }
       ] = await Promise.all([
-        supabase.from('patients').select('*'),
-        supabase.from('appointments').select('*'),
-        supabase.from('financial_transactions').select('*'),
-        supabase.from('inventory_items').select('*')
+        (supabase as any).from('patients').select('*'),
+        (supabase as any).from('appointments').select('*'),
+        (supabase as any).from('financial_transactions').select('*'),
+        (supabase as any).from('inventory_items').select('*')
       ]);
 
       if (patsData) setPatients(patsData);
-      if (appsData) setAppointments(appsData);
-      if (finData) setFinancialTransactions(finData);
+      if (appsData) setAppointments((appsData as any[]).map(a => ({ ...a, patientId: a.patient_id, patientName: a.patient_name, paymentStatus: a.payment_status, price: Number(a.price || 0) })));
+      if (finData) setFinancialTransactions((finData as any[]).map(t => ({ ...t, amount: Number(t.amount || 0) })));
       if (invData) setInventoryItems(invData);
     } catch (error) {
       console.error('Erro ao buscar dados para relatórios:', error);

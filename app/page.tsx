@@ -245,7 +245,8 @@ export default function Home() {
           ...a,
           patientId: a.patient_id,
           patientName: a.patient_name,
-          paymentStatus: a.payment_status
+          paymentStatus: a.payment_status,
+          price: Number(a.price || 0)
         })));
       }
       if (consultationsData) {
@@ -295,7 +296,10 @@ export default function Home() {
         setPackages(packagesData);
       }
       if (financialTransactionsData) {
-        setFinancialTransactions(financialTransactionsData);
+        setFinancialTransactions((financialTransactionsData as any[]).map(t => ({
+          ...t,
+          amount: Number(t.amount || 0)
+        })));
       }
     } catch (error) {
       console.error('Error fetching data:', error);

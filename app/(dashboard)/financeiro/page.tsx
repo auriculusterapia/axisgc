@@ -21,7 +21,7 @@ export default function FinancialPage() {
     duration: app.duration,
     type: app.type,
     status: app.status,
-    price: app.price,
+    price: Number(app.price || 0),
     paymentStatus: app.payment_status,
     notes: app.notes,
     packageId: app.package_id,
@@ -32,13 +32,13 @@ export default function FinancialPage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('appointments')
         .select('*')
         .order('date', { ascending: false });
       
       if (error) throw error;
-      if (data) setAppointments(data.map(mapAppointmentFromDB));
+      if (data) setAppointments((data as any[]).map(mapAppointmentFromDB));
     } catch (error) {
       console.error('Erro ao buscar dados financeiros:', error);
     } finally {
