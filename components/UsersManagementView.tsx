@@ -302,36 +302,63 @@ export default function UsersManagementView({ user }: UsersManagementViewProps) 
     
     setIsDeleting(true);
     setGeneralError(null);
+
+    // Timer de segurança para evitar que a UI trave se a RPC demorar
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('TIMEOUT')), 15000)
+    );
+
     try {
       const supabase = getSupabase();
       if (!supabase) throw new Error('Cliente Supabase não inicializado.');
 
-      // First try to delete using the RPC function (which deletes from auth.users)
-      const { error: rpcError } = await (supabase.rpc as any)('delete_user', { user_id: u.id });
+      console.log(`Iniciando exclusão do usuário: ${u.id} (${u.name})`);
+
+      // Tenta a RPC com timeout
+      const rpcPromise = (supabase.rpc as any)('delete_user', { user_id: u.id });
+      const { error: rpcError } = await Promise.race([rpcPromise, timeoutPromise]) as any;
       
       if (rpcError) {
-        console.warn('RPC delete_user failed, falling back to profile delete:', rpcError);
-        // Fallback: just delete from profiles if RPC is not available or fails
+        // Erro 23503 é violação de chave estrangeira (dados vinculados)
+        if (rpcError.code === '23503' || rpcError.message?.includes('violates foreign key constraint')) {
+          throw new Error('RESTRICTION');
+        }
+        
+        console.warn('RPC delete_user falhou, tentando fallback para profiles:', rpcError);
+        
         const { error: profileError } = await supabase
           .from('profiles')
           .delete()
           .eq('id', u.id);
         
-        if (profileError) throw profileError;
+        if (profileError) {
+          if (profileError.code === '23503' || profileError.message?.includes('violates foreign key constraint')) {
+             throw new Error('RESTRICTION');
+          }
+          throw profileError;
+        }
       }
       
-      setUsers(users.filter(item => item.id !== u.id));
+      setUsers(prevUsers => prevUsers.filter(item => item.id !== u.id));
+      console.log('Usuário excluído com sucesso.');
     } catch (err: any) {
       console.error('Error deleting user:', err);
-      let errorMessage = err.message || 'Erro desconhecido';
-      if (err.code) errorMessage += ` (Código: ${err.code})`;
-      if (err.details) errorMessage += ` - ${err.details}`;
-      setGeneralError(`Erro ao excluir usuário: ${errorMessage}`);
+      
+      if (err.message === 'TIMEOUT') {
+        setGeneralError('A operação demorou muito e foi cancelada. O banco de dados pode estar sobrecarregado. Tente novamente em instantes.');
+      } else if (err.message === 'RESTRICTION') {
+        setGeneralError(`Não é possível excluir "${u.name}" porque existem registros vinculados a este usuário (pacientes, agendamentos, etc.). Considere apenas remover suas permissões de acesso.`);
+      } else {
+        let errorMessage = err.message || 'Erro desconhecido';
+        if (err.code) errorMessage += ` (Código: ${err.code})`;
+        setGeneralError(`Erro ao excluir usuário: ${errorMessage}`);
+      }
     } finally {
       setUserToDelete(null);
       setIsDeleting(false);
     }
   };
+
 
   return (
     <div className="p-10 space-y-8 relative max-w-6xl mx-auto">

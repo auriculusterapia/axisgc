@@ -1,15 +1,16 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/supabase';
 
+// Singleton instance
 let supabaseInstance: SupabaseClient<Database> | null = null;
-let lastInitTime = 0;
-const REINIT_THRESHOLD = 1000 * 60 * 30; // 30 minutos
 
-export const getSupabase = (forceNew = false) => {
-  const now = Date.now();
-  
-  // Se já temos uma instância e não forçado, e não passou do threshold, retorna a atual
-  if (supabaseInstance && !forceNew && (now - lastInitTime < REINIT_THRESHOLD)) {
+/**
+ * Retorna a instância única do cliente Supabase.
+ * O uso de Singleton evita o erro "lock was released because another request stole it".
+ */
+export const getSupabase = () => {
+  // Se já temos uma instância, retorna ela sempre. Nunca recria se persistSession for true.
+  if (supabaseInstance) {
     return supabaseInstance;
   }
 
@@ -17,75 +18,92 @@ export const getSupabase = (forceNew = false) => {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Supabase URL or Anon Key is missing.');
+    console.error('Supabase URL or Anon Key is missing. Check .env.local');
     return null;
   }
 
-  console.log(forceNew ? 'Forçando reinicialização do cliente Supabase...' : 'Inicializando cliente Supabase...');
+  console.log('Inicializando instância única do cliente Supabase...');
   supabaseInstance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true
+      detectSessionInUrl: true,
+      // Garante que o lock de storage seja gerenciado de forma estável
+      storageKey: 'axis-auth-token-stable' 
     },
     global: {
-      headers: { 'x-client-info': 'axis-gc-stable' }
+      headers: { 'x-client-info': 'axis-gc-singleton' }
     }
   });
   
-  lastInitTime = now;
   return supabaseInstance;
 };
 
+let lastCheckTime = 0;
+let lastCheckResult = true;
+const CHECK_INTERVAL = 30000; // 30 segundos entre checks reais
+
 /**
- * Verifica se a conexão com o banco de dados está ativa realizando uma consulta simples.
- * @returns Promise<boolean>
+ * Verifica se a conexão com o banco de dados está ativa.
+ * Implementa cache de curto prazo para evitar flood de requisições de saúde.
  */
 export const checkConnection = async (): Promise<boolean> => {
   const client = getSupabase();
   if (!client) return false;
   
+  const now = Date.now();
+  if (now - lastCheckTime < CHECK_INTERVAL) {
+    return lastCheckResult;
+  }
+
   try {
-    // Tenta uma consulta mínima que não depende de permissões complexas (health check)
-    // Usamos 'profiles' com head: true para minimizar o tráfego e latência
+    // Consulta mínima para health check
     const { error } = await client
       .from('profiles')
       .select('id', { count: 'exact', head: true })
       .limit(1);
 
+    lastCheckTime = now;
+
     if (error) {
-      // Erros de RLS ainda significam que estamos "online"
+      // Erros de RLS ou permissão ainda significam que o servidor respondeu (estamos online)
       if (error.code === 'PGRST301' || error.message.includes('permission denied')) {
+        lastCheckResult = true;
         return true;
       }
       
-      console.warn('Conexão Supabase instável:', error.message);
-      // Se for erro de rede ou timeout, retorna falso
-      if (error.message.includes('fetch') || error.message.includes('timeout') || error.message.includes('Network')) {
-        return false;
-      }
+      console.warn('Conexão Supabase instável (Health Check):', error.message);
+      // Erro de rede ou timeout real
+      const isNetworkError = error.message.includes('fetch') || error.message.includes('timeout') || error.message.includes('Network');
+      lastCheckResult = !isNetworkError;
+      return lastCheckResult;
     }
+    
+    lastCheckResult = true;
     return true;
   } catch (err) {
-    console.error('Erro fatal ao verificar conexão:', err);
-    return false;
+    console.error('Erro fatal no checkConnection:', err);
+    return false; // Não atualiza cache em caso de erro fatal
   }
 };
 
-// Exporta um Proxy para que qualquer módulo que importe 'supabase' sempre use a instância ativa
-// Isso resolve o problema de referências "congeladas" em módulos que importam a constante no início
+/**
+ * Exporta um Proxy para que qualquer módulo que importe 'supabase' use a instância única.
+ */
 export const supabase = new Proxy({} as any, {
   get(target, prop) {
     const client = getSupabase();
     if (!client) return undefined;
     const value = (client as any)[prop];
-    // Se for uma função (como .from() ou .auth.getUser()), garante que o contexto 'this' seja o cliente
     return typeof value === 'function' ? value.bind(client) : value;
   }
 }) as SupabaseClient<Database>;
 
-// Helper para uso seguro em handlers do cliente
+/**
+ * Helper para uso seguro no lado do cliente.
+ */
 export const getClientSupabase = () => {
   if (typeof window === 'undefined') return null;
   return getSupabase();
 };
+

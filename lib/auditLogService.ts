@@ -15,6 +15,21 @@ interface LogActionParams {
 let auditEnabledCache: boolean | null = null;
 let lastCacheUpdate: number = 0;
 const CACHE_TTL = 60000; // 1 minuto
+let isBootstrapMode = false;
+
+/**
+ * Define se o sistema está em modo bootstrap (inicialização).
+ * Durante o bootstrap, os logs são ignorados para evitar concorrência.
+ */
+export function setBootstrapMode(enabled: boolean) {
+  isBootstrapMode = enabled;
+  if (enabled) {
+    console.log('[AuditLog] Sistema em modo bootstrap. Logs suspensos.');
+  } else {
+    console.log('[AuditLog] Modo bootstrap finalizado. Logs liberados.');
+  }
+}
+
 
 export async function isAuditEnabled(): Promise<boolean> {
   const now = Date.now();
@@ -46,8 +61,10 @@ export async function isAuditEnabled(): Promise<boolean> {
 
 export async function logAction({ action, entityType, details = {}, entityId, userId }: LogActionParams) {
   try {
+    if (isBootstrapMode) return;
     const isEnabled = await isAuditEnabled();
     if (!isEnabled) return;
+
 
     // Obtém o cliente atualizado via Proxy ou função (garante que não use instância congelada)
     const client = getSupabase();

@@ -1,9 +1,9 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase, checkConnection, getSupabase } from './supabase';
 import { User, UserRole, ADMIN_PERMISSIONS, ROLE_PERMISSIONS } from '@/types/auth';
-import { logAction } from './auditLogService';
+import { logAction, setBootstrapMode } from './auditLogService';
 
 interface AuthContextType {
   user: User | null;
@@ -22,6 +22,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'reconnecting'>('online');
+  const isInitializing = useRef(false);
+  const initialFetchDone = useRef(false);
 
   const fetchProfile = async (userId: string) => {
     if (!supabase) return;
@@ -91,29 +93,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
     let lastFocusCheck = 0;
+    
+    // Ativa o modo bootstrap para evitar logs de auditoria durante a carga inicial
+    setBootstrapMode(true);
 
     const initAuth = async () => {
-      // Safety timeout: force stop loading after 8s if it hangs
+      if (isInitializing.current || initialFetchDone.current) return;
+      isInitializing.current = true;
+
+      // Safety timeout: force stop loading after 10s if it hangs
       const safetyTimeout = setTimeout(() => {
         if (mounted && loading) {
-          console.warn('Auth initialization reached safety timeout. Forcing loading to false.');
+          console.warn('Auth initialization reached safety timeout.');
           setLoading(false);
+          isInitializing.current = false;
         }
-      }, 8000);
+      }, 10000);
 
       if (!supabase) {
         if (mounted) setLoading(false);
         clearTimeout(safetyTimeout);
+        isInitializing.current = false;
         return;
       }
 
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+
         if (mounted) {
           setSession(initialSession);
           if (initialSession) {
             await fetchProfile(initialSession.user.id);
           }
+          initialFetchDone.current = true;
         }
       } catch (error) {
         console.error('Error during initAuth:', error);
@@ -121,6 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setLoading(false);
           clearTimeout(safetyTimeout);
+          isInitializing.current = false;
+          // Desativa o modo bootstrap após a carga inicial (com um pequeno atraso para estabilidade)
+          setTimeout(() => setBootstrapMode(false), 2000);
         }
       }
     };
@@ -130,16 +146,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) return;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      console.log('Auth event change:', event);
       if (!mounted) return;
+      
+      // Evita processar o evento inicial redundante se o initAuth já o fez
+      if (initialFetchDone.current && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user?.id === currentSession?.user?.id) {
+        return;
+      }
 
+      console.log('Auth event change:', event);
+      
       try {
+        const prevSessionId = session?.user?.id;
         setSession(currentSession);
+
         if (currentSession) {
-          if (event === 'SIGNED_IN') {
-            logAction({ action: 'LOGIN', entityType: 'AUTH', userId: currentSession.user.id, details: { method: 'email' } });
+          // Só loga e busca perfil se for um novo usuário ou evento de login real
+          if (currentSession.user.id !== prevSessionId || event === 'SIGNED_IN') {
+            if (event === 'SIGNED_IN') {
+              // Log assíncrono para não travar a UI
+              logAction({ action: 'LOGIN', entityType: 'AUTH', userId: currentSession.user.id, details: { method: 'email' } }).catch(() => {});
+            }
+            await fetchProfile(currentSession.user.id);
           }
-          await fetchProfile(currentSession.user.id);
         } else {
           setUser(null);
         }
@@ -207,15 +235,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshConnection = async () => {
+    // Não recria o cliente, apenas verifica se a conexão está ativa
     setConnectionStatus('reconnecting');
     const isAlive = await checkConnection();
     if (isAlive) {
       setConnectionStatus('online');
     } else {
-      // Força recriação do cliente se falhar o check inicial
-      getSupabase(true);
-      const retryAlive = await checkConnection();
-      setConnectionStatus(retryAlive ? 'online' : 'offline');
+      // Se estiver offline, o checkConnection já lida com o estado interno
+      setConnectionStatus('offline');
     }
   };
 
