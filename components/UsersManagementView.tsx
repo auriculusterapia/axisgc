@@ -18,6 +18,7 @@ import { User, UserRole, ROLE_LABELS, ALL_PERMISSIONS, ROLE_PERMISSIONS, ADMIN_P
 import { getSupabase } from '@/lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import ConfirmationModal from './ConfirmationModal';
+import { logAction } from '@/lib/auditLogService';
 
 // Centralized supabase config access
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -162,6 +163,14 @@ export default function UsersManagementView({ user }: UsersManagementViewProps) 
         
         console.log('Update successful, returned data:', updateData);
         
+        // Registrar na auditoria
+        logAction({
+          action: 'UPDATE',
+          entityType: 'AUTH',
+          entityId: editingUser.id,
+          details: { name: userFormData.name, role: userFormData.role, updated_at: new Date().toISOString() }
+        }).catch(() => {});
+
         // Update local state with the new user data
         setUsers(prevUsers => prevUsers.map(u => u.id === editingUser.id ? { 
           ...u, 
@@ -228,6 +237,14 @@ export default function UsersManagementView({ user }: UsersManagementViewProps) 
           }
           
           console.log('Profile processed successfully');
+
+          // Registrar na auditoria
+          logAction({
+            action: 'CREATE',
+            entityType: 'AUTH',
+            entityId: authData.user.id,
+            details: { name: userFormData.name, email: userFormData.email, role: userFormData.role }
+          }).catch(() => {});
 
           const newUser: User = {
             id: authData.user.id,
@@ -324,24 +341,24 @@ export default function UsersManagementView({ user }: UsersManagementViewProps) 
           throw new Error('RESTRICTION');
         }
         
-        console.warn('RPC delete_user falhou, tentando fallback para profiles:', rpcError);
-        
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', u.id);
-        
-        if (profileError) {
-          if (profileError.code === '23503' || profileError.message?.includes('violates foreign key constraint')) {
-             throw new Error('RESTRICTION');
-          }
-          throw profileError;
-        }
+        console.error('RPC delete_user falhou criticamente:', rpcError);
+        throw new Error(`Falha ao remover usuário do sistema de autenticação: ${rpcError.message || 'Erro desconhecido'}`);
       }
       
+      // Se chegou aqui, a exclusão no Auth (que cascateia para Profile) foi bem-sucedida
       setUsers(prevUsers => prevUsers.filter(item => item.id !== u.id));
-      console.log('Usuário excluído com sucesso.');
+      
+      // Registrar na auditoria
+      logAction({
+        action: 'DELETE',
+        entityType: 'AUTH',
+        entityId: u.id,
+        details: { name: u.name, email: u.email }
+      }).catch(() => {});
+
+      console.log('Usuário excluído com sucesso do Auth e Profile.');
     } catch (err: any) {
+
       console.error('Error deleting user:', err);
       
       if (err.message === 'TIMEOUT') {
