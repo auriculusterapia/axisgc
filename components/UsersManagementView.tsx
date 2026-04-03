@@ -332,7 +332,7 @@ export default function UsersManagementView({ user }: UsersManagementViewProps) 
       console.log(`Iniciando exclusão do usuário: ${u.id} (${u.name})`);
 
       // Tenta a RPC com timeout
-      const rpcPromise = (supabase.rpc as any)('delete_user', { user_id: u.id });
+      const rpcPromise = (supabase.rpc as any)('delete_user', { id_to_delete: u.id });
       const { error: rpcError } = await Promise.race([rpcPromise, timeoutPromise]) as any;
       
       if (rpcError) {
