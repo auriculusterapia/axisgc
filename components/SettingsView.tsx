@@ -289,6 +289,7 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
 
   const handleUpdatePassword = async () => {
     setPasswordFeedback(null);
+    console.log('[Password Update] Iniciando processo para o usuário:', user?.email);
 
     // Validações básicas
     if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
@@ -306,16 +307,30 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
       return;
     }
 
-    // Se houver senha atual preenchida, poderíamos tentar uma reautenticação aqui 
-    // No Supabase GoTrue simplificado, updateUser já resolve para sessões ativas
-    
     setIsPasswordUpdating(true);
     try {
-      const { error } = await supabase.auth.updateUser({ 
+      // 1. Verifica sessão antes de tentar atualizar
+      console.log('[Password Update] Verificando sessão ativa...');
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !sessionData.session) {
+        console.error('[Password Update] Sessão não encontrada ou expirada:', sessionError);
+        throw new Error('Sessão de usuário não encontrada. Por favor, faça logout e entre novamente.');
+      }
+
+      console.log('[Password Update] Sessão válida encontrada. Enviando requisição para Supabase...');
+
+      // 2. Tenta atualizar a senha
+      const { data, error } = await supabase.auth.updateUser({ 
         password: passwordForm.newPassword 
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Password Update] Erro retornado pelo Supabase:', error);
+        throw error;
+      }
+
+      console.log('[Password Update] Senha atualizada com sucesso!', data);
 
       setPasswordFeedback({ type: 'success', message: 'Senha atualizada com sucesso!' });
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -327,10 +342,18 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
       }, 2000);
       
     } catch (error: any) {
-      console.error('Erro ao atualizar senha:', error);
+      console.error('[Password Update] Falha crítica na atualização:', error);
+      
+      let friendlyMessage = error.message || 'Falha ao atualizar senha. Tente novamente.';
+      
+      // Traduções de erros comuns do Supabase
+      if (friendlyMessage.includes('is not a string')) friendlyMessage = 'Formato de senha inválido.';
+      if (friendlyMessage.includes('New password must be different')) friendlyMessage = 'A nova senha deve ser diferente da atual.';
+      if (friendlyMessage.includes('Auth session missing')) friendlyMessage = 'Sessão expirada. Por favor, saia e entre novamente no sistema.';
+
       setPasswordFeedback({ 
         type: 'error', 
-        message: error.message || 'Falha ao atualizar senha. Tente novamente.' 
+        message: friendlyMessage
       });
     } finally {
       setIsPasswordUpdating(false);
