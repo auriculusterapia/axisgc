@@ -321,7 +321,7 @@ export default function FinancialView({
           ['A Receber (Pendente)', formatCurrency(pendingAmount)],
         ],
         theme: 'striped',
-        headStyles: { fillColor: [15, 82, 56] },
+        headStyles: { fillColor: [16, 185, 129] }, // Verde Esmeralda para Relatórios
       });
 
       let y = (doc as any).lastAutoTable.finalY + 12;
@@ -336,7 +336,7 @@ export default function FinancialView({
           formatCurrency(t.amount),
         ]),
         theme: 'striped',
-        headStyles: { fillColor: [15, 82, 56] },
+        headStyles: { fillColor: [17, 37, 84] }, // Marinho Axis para o resto
       });
 
       doc.save(`relatorio_financeiro_${new Date().toISOString().split('T')[0]}.pdf`);

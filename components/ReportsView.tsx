@@ -15,7 +15,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { User as UserType } from '@/types/auth';
 
-const COLORS = ['#0F5238', '#2D9CDB', '#F2994A', '#EB5757', '#9B51E0', '#27AE60'];
+const COLORS = ['#172554', '#0EA5E9', '#F2994A', '#EB5757', '#9B51E0', '#27AE60'];
 
 interface ReportsViewProps {
   user: UserType | null;

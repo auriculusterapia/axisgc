@@ -646,7 +646,7 @@ export default function InventoryView({
                     </p>
                   </div>
                   
-                  {transactionFormData.category === 'PURCHASE' && (
+                     {transactionFormData.type === 'IN' && (
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-outline uppercase tracking-widest">Preço de Compra (Unitário R$)</label>
                       <input 

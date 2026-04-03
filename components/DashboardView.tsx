@@ -199,7 +199,7 @@ export default function DashboardView({
                     <div className={`w-1.5 h-14 ${
                       item.type === 'initial' ? 'bg-blue-500' : 
                       item.type === 'emergency' ? 'bg-rose-500' : 
-                      'bg-emerald-500'
+                      'bg-secondary'
                     } rounded-full`}></div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-headline font-bold text-lg md:text-xl text-on-surface truncate">{item.patientName}</h4>
