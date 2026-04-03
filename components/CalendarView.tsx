@@ -145,6 +145,13 @@ export default function CalendarView({
     return found ? found.price : 150;
   };
 
+  const getAppointmentColor = (type: string) => {
+    if (type === 'initial')   return 'bg-emerald-50 border-emerald-500 text-emerald-700';
+    if (type === 'emergency') return 'bg-rose-50 border-rose-500 text-rose-700';
+    // follow-up / Retorno
+    return 'bg-amber-50 border-amber-500 text-amber-700';
+  };
+
   const handleSaveAppointment = async () => {
     if (!newAppointment.patientId) {
       alert('Por favor, selecione um paciente para o agendamento.');
@@ -243,11 +250,7 @@ export default function CalendarView({
                     setIsModalOpen(true);
                   }
                 }}
-                className={`text-[10px] p-1 rounded border-l-2 truncate cursor-pointer transition-all hover:brightness-95 ${
-                  app.type === 'initial' ? 'bg-blue-50 border-blue-500 text-blue-700' :
-                  app.type === 'emergency' ? 'bg-rose-50 border-rose-500 text-rose-700' :
-                  'bg-emerald-50 border-emerald-500 text-emerald-700'
-                }`}
+                className={`text-[10px] p-1 rounded border-l-2 truncate cursor-pointer transition-all hover:brightness-95 ${getAppointmentColor(app.type)}`}
               >
                 <span className="font-bold">{app.time}</span> {app.patientName}
               </div>
@@ -294,11 +297,7 @@ export default function CalendarView({
                     setIsModalOpen(true);
                   }
                 }}
-                className={`p-3 rounded-xl border-l-4 shadow-sm cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${
-                  app.type === 'initial' ? 'bg-blue-50 border-blue-500 text-blue-700' :
-                  app.type === 'emergency' ? 'bg-rose-50 border-rose-500 text-rose-700' :
-                  'bg-emerald-50 border-emerald-500 text-emerald-700'
-                }`}
+                className={`p-3 rounded-xl border-l-4 shadow-sm cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${getAppointmentColor(app.type)}`}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <Clock size={12} />
@@ -378,6 +377,20 @@ export default function CalendarView({
             </button>
           )}
         </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-6 flex-wrap">
+        <span className="text-[10px] font-bold text-outline uppercase tracking-widest">Legenda:</span>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+          <span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block" /> Primeira Consulta
+        </span>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+          <span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" /> Retorno
+        </span>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-rose-700">
+          <span className="w-3 h-3 rounded-sm bg-rose-500 inline-block" /> Emergência
+        </span>
       </div>
 
       {/* Calendar Grid */}
