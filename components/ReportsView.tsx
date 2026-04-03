@@ -441,115 +441,6 @@ export default function ReportsView({
         />
       </section>
 
-      {/* DOWNLOADS ESPECIALIZADOS - NEW SECTION */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2 px-2">
-          <TrendingUp size={20} className="text-primary" />
-          <h3 className="text-xl font-headline font-bold text-on-surface">Downloads Estratégicos</h3>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <ReportDownloadCard 
-            title="Fluxo de Caixa"
-            desc="Entradas, saídas e saldo progressivo dia a dia."
-            onPdf={() => exportCashFlow('pdf')}
-            onXlsx={() => exportCashFlow('xlsx')}
-            icon={TrendingUp}
-            color="emerald"
-          />
-          <ReportDownloadCard 
-            title="Lucro ou Prejuízo"
-            desc="Comparativo direto (DRE) entre ganhos e gastos."
-            onPdf={() => exportProfitLoss('pdf')}
-            onXlsx={() => exportProfitLoss('xlsx')}
-            icon={BarChart3}
-            color="indigo"
-          />
-          <ReportDownloadCard 
-            title="Faturamento por Serviço"
-            desc="Ranking de rentabilidade por especialidade."
-            onPdf={() => exportServiceRevenue('pdf')}
-            onXlsx={() => exportServiceRevenue('xlsx')}
-            icon={Users}
-            color="amber"
-          />
-          <ReportDownloadCard 
-            title="Estoque & Custo Médio"
-            desc="Valor patrimonial e consumo de materiais."
-            onPdf={() => exportInventoryAssets('pdf')}
-            onXlsx={() => exportInventoryAssets('xlsx')}
-            icon={Package}
-            color="rose"
-          />
-        </div>
-      </section>
-
-      {/* Main Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Revenue Chart */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm p-8"
-        >
-          <div className="mb-6">
-            <h3 className="text-xl font-headline font-bold text-on-surface">Evolução Financeira</h3>
-            <p className="text-sm text-outline font-medium">Receitas vs Despesas mensal</p>
-          </div>
-          
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#64748B' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#64748B' }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
-                  formatter={(value: any) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                />
-                <Legend iconType="circle" />
-                <Bar dataKey="receita" fill="#0F5238" radius={[6, 6, 0, 0]} name="Receita" />
-                <Bar dataKey="despesa" fill="#EB5757" radius={[6, 6, 0, 0]} name="Despesa" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
-
-        {/* Top Protocols Chart */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="bg-white rounded-[2.5rem] border border-outline-variant/10 shadow-sm p-8"
-        >
-          <div className="mb-6">
-            <h3 className="text-xl font-headline font-bold text-on-surface">Top 5 Tratamentos</h3>
-            <p className="text-sm text-outline font-medium">Protocolos mais utilizados</p>
-          </div>
-          
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={topProtocols}
-                  cx="50%"
-                  cy="50%"
-                innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, percent }: any) => `${name} (${((percent || 0) * 100).toFixed(0)}%)`}
-                >
-                  {topProtocols.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
-      </div>
-
       {/* Second Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Distribution by Gender */}
@@ -634,6 +525,49 @@ export default function ReportsView({
           </div>
         </div>
       </div>
+
+      {/* DOWNLOADS ESPECIALIZADOS - MOVED TO THE BOTTOM */}
+      <section className="space-y-4 pt-4 border-t border-outline-variant/10">
+        <div className="flex items-center gap-2 px-2">
+          <Download size={20} className="text-primary" />
+          <h3 className="text-xl font-headline font-bold text-on-surface">Downloads Estratégicos</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <ReportDownloadCard 
+            title="Fluxo de Caixa"
+            desc="Entradas, saídas e saldo progressivo dia a dia."
+            onPdf={() => exportCashFlow('pdf')}
+            onXlsx={() => exportCashFlow('xlsx')}
+            icon={TrendingUp}
+            color="emerald"
+          />
+          <ReportDownloadCard 
+            title="Lucro ou Prejuízo"
+            desc="Comparativo direto (DRE) entre ganhos e gastos."
+            onPdf={() => exportProfitLoss('pdf')}
+            onXlsx={() => exportProfitLoss('xlsx')}
+            icon={BarChart3}
+            color="indigo"
+          />
+          <ReportDownloadCard 
+            title="Faturamento por Serviço"
+            desc="Ranking de rentabilidade por especialidade."
+            onPdf={() => exportServiceRevenue('pdf')}
+            onXlsx={() => exportServiceRevenue('xlsx')}
+            icon={Users}
+            color="amber"
+          />
+          <ReportDownloadCard 
+            title="Estoque & Custo Médio"
+            desc="Valor patrimonial e consumo de materiais."
+            onPdf={() => exportInventoryAssets('pdf')}
+            onXlsx={() => exportInventoryAssets('xlsx')}
+            icon={Package}
+            color="rose"
+          />
+        </div>
+      </section>
     </div>
   );
 }
