@@ -266,10 +266,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     // 1. Limpa o estado local INSTANTANEAMENTE para destravar a UI
-    console.log('[Auth] Iniciando Logoff Instantâneo no Cliente...');
+    console.log('[Auth] Iniciando Faxina Completa e Logoff Instantâneo...');
     const prevUserId = user?.id;
     setUser(null);
     setSession(null);
+
+    // 2. Limpeza Profunda de Cookies e Storage
+    try {
+      // Limpa Cookies
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c
+          .replace(/^ +/, "")
+          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+      // Limpa Storages
+      localStorage.clear();
+      sessionStorage.clear();
+      console.log('[Auth] Cookies e Storages limpos com sucesso.');
+    } catch (e) {
+      console.warn('[Auth] Erro ao limpar cookies/storage:', e);
+    }
     
     try {
       if (supabase) {

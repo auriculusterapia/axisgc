@@ -16,9 +16,28 @@ export default function LoginView({ onLogin }: LoginViewProps) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+
+  // Limpeza de Cookies e Storage ao carregar a tela de Login
+  React.useEffect(() => {
+    console.log('[Login] Limpando vestígios de sessões antigas...');
+    try {
+      // 1. Limpa Cookies
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c
+          .replace(/^ +/, "")
+          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+      // 2. Limpa Storages
+      localStorage.clear();
+      sessionStorage.clear();
+      console.log('[Login] Ambiente limpo com sucesso.');
+    } catch (e) {
+      console.warn('[Login] Falha ao realizar limpeza preventiva:', e);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
