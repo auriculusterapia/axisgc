@@ -68,7 +68,7 @@ export default function CalendarView({
   packages = []
 }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('week');
   
   const [consultationTypes, setConsultationTypes] = useState<ConsultationType[]>([
     { id: 'initial', name: 'Primeira Consulta', price: 250 },
@@ -146,9 +146,10 @@ export default function CalendarView({
   };
 
   const getAppointmentColor = (type: string) => {
-    if (type === 'initial')   return 'bg-emerald-50 border-emerald-500 text-emerald-700';
-    if (type === 'emergency') return 'bg-rose-50 border-rose-500 text-rose-700';
-    // follow-up / Retorno
+    const t = (type || '').toLowerCase().replace(/-/g, '');
+    if (t === 'initial' || t === 'primeiraconsulta') return 'bg-emerald-50 border-emerald-500 text-emerald-700';
+    if (t === 'emergency' || t === 'emergencia' || t === 'urgencia') return 'bg-rose-50 border-rose-500 text-rose-700';
+    // followup / follow-up / retorno / outros
     return 'bg-amber-50 border-amber-500 text-amber-700';
   };
 
