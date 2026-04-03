@@ -111,6 +111,15 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
   const [isSpecialtiesModalOpen, setIsSpecialtiesModalOpen] = useState(false);
+
+  // Estados para atualização de senha
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [isPasswordUpdating, setIsPasswordUpdating] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState<{ type: 'error' | 'success', message: string } | null>(null);
   
   const [auditEnabled, setAuditEnabled] = useState(true);
   const [isAuditingLoading, setIsAuditingLoading] = useState(true);
@@ -276,6 +285,56 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleUpdatePassword = async () => {
+    setPasswordFeedback(null);
+
+    // Validações básicas
+    if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setPasswordFeedback({ type: 'error', message: 'Por favor, preencha a nova senha e a confirmação.' });
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordFeedback({ type: 'error', message: 'As senhas não coincidem.' });
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordFeedback({ type: 'error', message: 'A senha deve ter pelo menos 6 caracteres.' });
+      return;
+    }
+
+    // Se houver senha atual preenchida, poderíamos tentar uma reautenticação aqui 
+    // No Supabase GoTrue simplificado, updateUser já resolve para sessões ativas
+    
+    setIsPasswordUpdating(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ 
+        password: passwordForm.newPassword 
+      });
+
+      if (error) throw error;
+
+      setPasswordFeedback({ type: 'success', message: 'Senha atualizada com sucesso!' });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      
+      // Fecha o modal após 2 segundos
+      setTimeout(() => {
+        setIsSecurityModalOpen(false);
+        setPasswordFeedback(null);
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Erro ao atualizar senha:', error);
+      setPasswordFeedback({ 
+        type: 'error', 
+        message: error.message || 'Falha ao atualizar senha. Tente novamente.' 
+      });
+    } finally {
+      setIsPasswordUpdating(false);
+    }
   };
 
   const sections = [
@@ -640,23 +699,56 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
                 </button>
               </div>
               <div className="p-8 space-y-6">
+                {passwordFeedback && (
+                  <div className={`p-4 rounded-2xl flex items-center gap-3 text-sm font-medium animate-in fade-in slide-in-from-top-2 ${
+                    passwordFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'
+                  }`}>
+                    {passwordFeedback.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
+                    <p>{passwordFeedback.message}</p>
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-outline uppercase tracking-widest">Senha Atual</label>
-                  <input type="password" placeholder="••••••••" className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium" />
+                  <label className="text-xs font-bold text-outline uppercase tracking-widest">Senha Atual (Opcional)</label>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={passwordForm.currentPassword}
+                    onChange={e => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                    className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-outline uppercase tracking-widest">Nova Senha</label>
-                  <input type="password" placeholder="••••••••" className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium" />
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={passwordForm.newPassword}
+                    onChange={e => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-outline uppercase tracking-widest">Confirmar Nova Senha</label>
-                  <input type="password" placeholder="••••••••" className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium" />
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={passwordForm.confirmPassword}
+                    onChange={e => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                    className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium" 
+                  />
                 </div>
                 <button 
-                  onClick={() => setIsSecurityModalOpen(false)}
-                  className="w-full py-4 rounded-2xl bg-rose-500 text-white font-bold shadow-xl shadow-rose-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                  onClick={handleUpdatePassword}
+                  disabled={isPasswordUpdating}
+                  className="w-full py-4 rounded-2xl bg-rose-500 text-white font-bold shadow-xl shadow-rose-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:scale-100"
                 >
-                  <Shield size={20} /> Atualizar Senha
+                  {isPasswordUpdating ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Shield size={20} />
+                  )}
+                  {isPasswordUpdating ? 'Atualizando...' : 'Atualizar Senha'}
                 </button>
               </div>
             </motion.div>
