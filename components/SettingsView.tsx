@@ -314,16 +314,22 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !sessionData.session) {
-        console.error('[Password Update] Sessão não encontrada ou expirada:', sessionError);
-        throw new Error('Sessão de usuário não encontrada. Por favor, faça logout e entre novamente.');
+        throw new Error('Sessão expirada. Por favor, saia e entre novamente.');
       }
 
-      console.log('[Password Update] Sessão válida encontrada. Enviando requisição para Supabase...');
+      console.log('[Password Update] Enviando para Supabase com timeout de 10s...');
 
-      // 2. Tenta atualizar a senha
-      const { data, error } = await supabase.auth.updateUser({ 
+      // 2. Tenta atualizar a senha com um timeout de segurança de 10 segundos
+      // Isso impede que o botão fique em "Atualizando..." para sempre se o Supabase não responder
+      const updatePromise = supabase.auth.updateUser({ 
         password: passwordForm.newPassword 
       });
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('timeout')), 10000)
+      );
+
+      const { data, error } = await Promise.race([updatePromise, timeoutPromise]) as any;
 
       if (error) {
         console.error('[Password Update] Erro retornado pelo Supabase:', error);
@@ -331,7 +337,6 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
       }
 
       console.log('[Password Update] Senha atualizada com sucesso!', data);
-
       setPasswordFeedback({ type: 'success', message: 'Senha atualizada com sucesso!' });
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       
@@ -342,19 +347,21 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
       }, 2000);
       
     } catch (error: any) {
-      console.error('[Password Update] Falha crítica na atualização:', error);
+      console.error('[Password Update] Erro detalhado:', error);
       
       let friendlyMessage = error.message || 'Falha ao atualizar senha. Tente novamente.';
       
-      // Traduções de erros comuns do Supabase
-      if (friendlyMessage.includes('is not a string')) friendlyMessage = 'Formato de senha inválido.';
-      if (friendlyMessage.includes('New password must be different')) friendlyMessage = 'A nova senha deve ser diferente da atual.';
-      if (friendlyMessage.includes('Auth session missing')) friendlyMessage = 'Sessão expirada. Por favor, saia e entre novamente no sistema.';
+      if (error.message === 'timeout') {
+        friendlyMessage = 'O servidor demorou muito a responder. Verifique sua conexão, mas a senha pode ter sido alterada (tente logar novamente).';
+      } else if (friendlyMessage.includes('is not a string')) {
+        friendlyMessage = 'Formato de senha inválido.';
+      } else if (friendlyMessage.includes('New password must be different')) {
+        friendlyMessage = 'A nova senha deve ser diferente da atual.';
+      } else if (friendlyMessage.includes('Auth session missing')) {
+        friendlyMessage = 'Sessão expirada. Por favor, saia e entre novamente.';
+      }
 
-      setPasswordFeedback({ 
-        type: 'error', 
-        message: friendlyMessage
-      });
+      setPasswordFeedback({ type: 'error', message: friendlyMessage });
     } finally {
       setIsPasswordUpdating(false);
     }

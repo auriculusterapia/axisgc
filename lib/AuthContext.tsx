@@ -265,21 +265,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    // 1. Limpa o estado local INSTANTANEAMENTE para destravar a UI
+    console.log('[Auth] Iniciando Logoff Instantâneo no Cliente...');
+    const prevUserId = user?.id;
+    setUser(null);
+    setSession(null);
+    
     try {
       if (supabase) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.id) {
-          await logAction({ action: 'LOGOUT', entityType: 'AUTH', userId: session.user.id });
+        if (prevUserId) {
+          // Log de auditoria (opcional se der erro)
+          await logAction({ action: 'LOGOUT', entityType: 'AUTH', userId: prevUserId }).catch(() => {});
         }
-        await supabase.auth.signOut();
+        
+        // 2. Tenta fazer o logoff no servidor em background
+        // Se este comando demorar ou falhar, o usuário já estará "deslogado" localmente
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.warn('[Auth] Erro no signOut do servidor (não crítico):', error.message);
+        }
       }
     } catch (error) {
-      console.error('Error signing out from Supabase:', error);
+      console.error('[Auth] Falha crítica ao deslogar no servidor:', error);
     } finally {
-      // Always clear local state
-      setUser(null);
-      setSession(null);
-      console.log('Local auth state cleared');
+      console.log('[Auth] Logoff local concluído com sucesso.');
     }
   };
 
