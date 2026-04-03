@@ -222,7 +222,7 @@ export default function Home() {
         { data: packagesData },
         { data: financialTransactionsData }
       ] = await Promise.all([
-        (supabase as any).from('patients').select('*').order('name'),
+        (supabase as any).from('patients').select('*, patient_packages(status)').order('name'),
         (supabase as any).from('appointments').select('*').order('date', { ascending: false }),
         (supabase as any).from('consultations').select('*').order('date', { ascending: false }),
         (supabase as any).from('evaluations').select('*').order('date', { ascending: false }),
@@ -237,7 +237,8 @@ export default function Home() {
           ...p,
           maritalStatus: p.marital_status || 'Solteiro(a)',
           avatar: p.avatar_url || '',
-          lastVisit: p.last_visit || 'N/A'
+          lastVisit: p.last_visit || 'N/A',
+          hasActivePackage: Array.isArray(p.patient_packages) && p.patient_packages.some((pkg: any) => pkg.status === 'active')
         })));
       }
       if (appointmentsData) {

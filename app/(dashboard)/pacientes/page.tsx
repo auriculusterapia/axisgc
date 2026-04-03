@@ -28,7 +28,7 @@ export default function PatientsPage() {
     try {
       const { data, error } = await supabase
         .from('patients')
-        .select('*')
+        .select('*, patient_packages(status)')
         .order('name');
       
       if (error) throw error;
@@ -38,7 +38,8 @@ export default function PatientsPage() {
           ...p,
           maritalStatus: p.marital_status || 'Solteiro(a)',
           avatar: p.avatar_url || '',
-          lastVisit: p.last_visit || 'N/A'
+          lastVisit: p.last_visit || 'N/A',
+          hasActivePackage: Array.isArray(p.patient_packages) && p.patient_packages.some((pkg: any) => pkg.status === 'active')
         })));
       }
     } catch (error) {
