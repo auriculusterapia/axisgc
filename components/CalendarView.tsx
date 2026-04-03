@@ -85,7 +85,7 @@ export default function CalendarView({
   const canDelete = user?.permissions.includes('calendar:delete') || user?.role === 'ADMIN';
 
   const [newAppointment, setNewAppointment] = useState<Partial<Appointment>>({
-    date: new Date().toISOString().split('T')[0],
+    date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
     time: '09:00',
     duration: 45,
     type: 'follow-up',
@@ -97,7 +97,7 @@ export default function CalendarView({
   const resetForm = (date?: string) => {
     setEditingAppointment(null);
     setNewAppointment({
-      date: date || new Date().toISOString().split('T')[0],
+      date: date || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
       time: '09:00',
       duration: 45,
       type: 'follow-up',
@@ -172,7 +172,7 @@ export default function CalendarView({
       setIsModalOpen(false);
       setEditingAppointment(null);
       setNewAppointment({
-        date: new Date().toISOString().split('T')[0],
+        date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
         time: '09:00',
         duration: 45,
         type: 'follow-up',
@@ -210,7 +210,8 @@ export default function CalendarView({
     for (let d = 1; d <= totalDays; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayAppointments = appointments.filter(app => app.date === dateStr);
-      const isToday = new Date().toISOString().split('T')[0] === dateStr;
+      const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+      const isToday = todayStr === dateStr;
 
       days.push(
         <div key={d} className={`h-32 border-b border-r border-outline-variant/5 p-2 transition-colors hover:bg-surface-container-low/50 group relative`}>
@@ -266,9 +267,10 @@ export default function CalendarView({
     for (let i = 0; i < 7; i++) {
       const day = new Date(startOfWeek);
       day.setDate(startOfWeek.getDate() + i);
-      const dateStr = day.toISOString().split('T')[0];
-      const dayAppointments = appointments.filter(app => app.date === dateStr);
-      const isToday = new Date().toISOString().split('T')[0] === dateStr;
+      const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+      const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+      const isToday = todayStr === dateStr;
+      const dayAppointments = appointments.filter((app: any) => app.date === dateStr);
 
       days.push(
         <div key={i} className={`h-[500px] border-r border-outline-variant/5 p-2 transition-colors hover:bg-surface-container-low/50 group relative`}>
