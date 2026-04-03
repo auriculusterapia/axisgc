@@ -95,7 +95,14 @@ export const supabase = new Proxy({} as any, {
     const client = getSupabase();
     if (!client) return undefined;
     const value = (client as any)[prop];
-    return typeof value === 'function' ? value.bind(client) : value;
+
+    // Se o valor for uma função e pertencer diretamente ao cliente (como from, rpc)
+    // fazemos o bind. Se for um sub-objeto (como auth, storage) retornamos o objeto original.
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    
+    return value;
   }
 }) as SupabaseClient<Database>;
 

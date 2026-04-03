@@ -309,51 +309,41 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
 
     setIsPasswordUpdating(true);
     try {
-      // 1. Verifica sessão antes de tentar atualizar
-      console.log('[Password Update] Verificando sessão ativa...');
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !sessionData.session) {
-        throw new Error('Sessão expirada. Por favor, saia e entre novamente.');
-      }
+      console.log('[Password Update] Enviando comando para o servidor...');
 
-      console.log('[Password Update] Enviando para Supabase com timeout de 10s...');
-
-      // 2. Tenta atualizar a senha com um timeout de segurança de 10 segundos
-      // Isso impede que o botão fique em "Atualizando..." para sempre se o Supabase não responder
-      const updatePromise = supabase.auth.updateUser({ 
+      // 1. Tenta atualizar a senha
+      // Como já vimos que o servidor processa rápido mas o client trava no storage, 
+      // vamos disparar e gerenciar o sucesso de forma proativa.
+      const { data, error } = await supabase.auth.updateUser({ 
         password: passwordForm.newPassword 
       });
 
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('timeout')), 10000)
-      );
-
-      const { data, error } = await Promise.race([updatePromise, timeoutPromise]) as any;
-
       if (error) {
-        console.error('[Password Update] Erro retornado pelo Supabase:', error);
+        console.error('[Password Update] Erro imediato do servidor:', error);
         throw error;
       }
 
-      console.log('[Password Update] Senha atualizada com sucesso!', data);
-      setPasswordFeedback({ type: 'success', message: 'Senha atualizada com sucesso!' });
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      
-      // Fecha o modal após 2 segundos
+      console.log('[Password Update] Sucesso detectado! Forçando logout de segurança...');
+
+      // 2. Feedback de sucesso
+      setPasswordFeedback({ 
+        type: 'success', 
+        message: 'Senha alterada com sucesso! Para sua segurança, faça login novamente com sua nova senha.' 
+      });
+
+      // 3. Aguarda 2 segundos para o usuário ler a mensagem e então desloga
+      // O logout limpa todos os tokens travados no localStorage.
       setTimeout(() => {
         setIsSecurityModalOpen(false);
-        setPasswordFeedback(null);
-      }, 2000);
+        onLogout(); // Chama o logoff instantâneo
+      }, 3000);
       
     } catch (error: any) {
-      console.error('[Password Update] Erro detalhado:', error);
+      console.error('[Password Update] Erro no processo:', error);
       
       let friendlyMessage = error.message || 'Falha ao atualizar senha. Tente novamente.';
       
-      if (error.message === 'timeout') {
-        friendlyMessage = 'O servidor demorou muito a responder. Verifique sua conexão, mas a senha pode ter sido alterada (tente logar novamente).';
-      } else if (friendlyMessage.includes('is not a string')) {
+      if (friendlyMessage.includes('is not a string')) {
         friendlyMessage = 'Formato de senha inválido.';
       } else if (friendlyMessage.includes('New password must be different')) {
         friendlyMessage = 'A nova senha deve ser diferente da atual.';
@@ -362,7 +352,6 @@ export default function SettingsView({ user, onLogout }: SettingsViewProps) {
       }
 
       setPasswordFeedback({ type: 'error', message: friendlyMessage });
-    } finally {
       setIsPasswordUpdating(false);
     }
   };
