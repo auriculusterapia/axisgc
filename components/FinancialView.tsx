@@ -53,7 +53,7 @@ export default function FinancialView({
   const [itemToDelete, setItemToDelete] = useState<{ id: string; source: 'manual' | 'appointment' } | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'INCOME' | 'EXPENSE'>('all');
-  const [timeRange, setTimeRange] = useState<'hoje' | '7d' | 'mes' | 'semestre' | 'ano'>('mes');
+  const [timeRange, setTimeRange] = useState<'hoje' | '7d' | 'mes' | 'semestre' | 'ano'>('7d');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
