@@ -19,6 +19,7 @@ import EvaluationsView from '@/components/EvaluationsView';
 import LoginView from '@/components/LoginView';
 import BottomNav from '@/components/BottomNav';
 import ReportsView from '@/components/ReportsView';
+import BillingView from '@/components/BillingView';
 import { AnimatePresence, motion } from 'motion/react';
 import PatientModal from '@/components/PatientModal';
 import ConsultationModal from '@/components/ConsultationModal';
@@ -1445,6 +1446,8 @@ export default function Home() {
             inventoryItems={inventoryItems}
           />
         );
+      case 'billing':
+        return <BillingView user={user} />;
       default:
         return (
           <div className="flex items-center justify-center h-full">

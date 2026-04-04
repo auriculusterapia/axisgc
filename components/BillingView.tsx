@@ -33,12 +33,12 @@ import { supabase } from '@/lib/supabase';
 
 interface BillingViewProps {
   user: User;
-  billingItems: BillingItem[];
-  batches: BillingBatch[];
-  insurers: Insurer[];
-  plans: InsurancePlan[];
-  prices: InsurancePrice[];
-  procedures: Procedure[];
+  billingItems?: BillingItem[];
+  batches?: BillingBatch[];
+  insurers?: Insurer[];
+  plans?: InsurancePlan[];
+  prices?: InsurancePrice[];
+  procedures?: Procedure[];
   loading?: boolean;
   onRefresh?: () => void;
 }
