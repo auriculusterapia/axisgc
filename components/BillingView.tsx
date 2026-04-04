@@ -88,17 +88,18 @@ export default function BillingView({
     if (!supabase || !user) return;
     setIsSaving(true);
     try {
-      const { error } = await (supabase as any).from('insurers').upsert([{ 
-        ...insurerForm, 
-        id: editingItem?.id,
-        created_by: user.id 
-      }]);
+      const payload: any = { ...insurerForm, created_by: user.id };
+      if (editingItem?.id) payload.id = editingItem.id;
+
+      const { error } = await (supabase as any).from('insurers').upsert([payload]);
       if (error) throw error;
+      
       setIsInsurerModalOpen(false);
       setEditingItem(null);
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Erro ao salvar operadora:', error);
+      alert('Erro ao salvar operadora. Verifique se o nome já existe.');
     } finally {
       setIsSaving(false);
     }
@@ -108,17 +109,17 @@ export default function BillingView({
     if (!supabase || !user) return;
     setIsSaving(true);
     try {
-      const { error } = await (supabase as any).from('insurance_plans').upsert([{ 
-        ...planForm, 
-        id: editingItem?.id,
-        created_by: user.id 
-      }]);
+      const payload: any = { ...planForm, created_by: user.id };
+      if (editingItem?.id) payload.id = editingItem.id;
+
+      const { error } = await (supabase as any).from('insurance_plans').upsert([payload]);
       if (error) throw error;
       setIsPlanModalOpen(false);
       setEditingItem(null);
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Erro ao salvar plano:', error);
+      alert('Erro ao salvar plano. Verifique os dados.');
     } finally {
       setIsSaving(false);
     }
@@ -128,17 +129,17 @@ export default function BillingView({
     if (!supabase || !user) return;
     setIsSaving(true);
     try {
-      const { error } = await (supabase as any).from('procedures').upsert([{ 
-        ...procedureForm, 
-        id: editingItem?.id,
-        created_by: user.id 
-      }]);
+      const payload: any = { ...procedureForm, created_by: user.id };
+      if (editingItem?.id) payload.id = editingItem.id;
+
+      const { error } = await (supabase as any).from('procedures').upsert([payload]);
       if (error) throw error;
       setIsProcedureModalOpen(false);
       setEditingItem(null);
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Erro ao salvar procedimento:', error);
+      alert('Erro ao salvar procedimento.');
     } finally {
       setIsSaving(false);
     }
