@@ -1473,7 +1473,7 @@ export default function Home() {
           />
         );
       case 'billing':
-        return <BillingView user={user} onRefresh={fetchData} billingItems={billingItems} batches={billingBatches} insurers={insurers} plans={insurancePlans} prices={insurancePrices} procedures={procedures} loading={isDataLoading} />;
+        return <BillingView patients={patients} user={user} onRefresh={fetchData} billingItems={billingItems} batches={billingBatches} insurers={insurers} plans={insurancePlans} prices={insurancePrices} procedures={procedures} loading={isDataLoading} />;
       default:
         return (
           <div className="flex items-center justify-center h-full">

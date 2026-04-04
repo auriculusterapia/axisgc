@@ -39,6 +39,7 @@ interface BillingViewProps {
   plans?: InsurancePlan[];
   prices?: InsurancePrice[];
   procedures?: Procedure[];
+  patients?: any[];
   loading?: boolean;
   onRefresh?: () => void;
 }
@@ -51,6 +52,7 @@ export default function BillingView({
   plans = [], 
   prices = [],
   procedures = [],
+  patients = [],
   loading = false,
   onRefresh 
 }: BillingViewProps) {
@@ -74,6 +76,7 @@ export default function BillingView({
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isProcedureModalOpen, setIsProcedureModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [isManualItemModalOpen, setIsManualItemModalOpen] = useState(false);
   
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -83,6 +86,14 @@ export default function BillingView({
   const [planForm, setPlanForm] = useState({ name: '', insurer_id: '', type: 'ambulatorial' });
   const [procedureForm, setProcedureForm] = useState({ name: '', code: '', description: '', category: 'CONSULTA' });
   const [priceForm, setPriceForm] = useState({ plan_id: '', procedure_id: '', value: 0 });
+  const [manualItemForm, setManualItemForm] = useState({ 
+    patient_id: '', 
+    insurance_plan_id: '', 
+    procedure_id: '', 
+    service_date: new Date().toISOString().split('T')[0], 
+    guia_number: '', 
+    auth_number: '' 
+  });
 
   const handleSaveInsurer = async () => {
     if (!supabase || !user) return;
@@ -142,6 +153,39 @@ export default function BillingView({
     } catch (error) {
       console.error('Erro ao salvar procedimento:', error);
       alert('Erro ao salvar procedimento.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveManualItem = async () => {
+    if (!supabase || !user) return;
+    setIsSaving(true);
+    try {
+      let unit_value = 0;
+      const matchedPrice = prices.find(p => p.plan_id === manualItemForm.insurance_plan_id && p.procedure_id === manualItemForm.procedure_id);
+      if (matchedPrice) {
+         unit_value = matchedPrice.value;
+      }
+      
+      const payload: any = { 
+        ...manualItemForm,
+        unit_value,
+        total_presented_value: unit_value,
+        status: 'pending',
+        quantity: 1,
+        created_by: user.id 
+      };
+
+      const { error } = await (supabase as any).from('billing_items').insert([payload]);
+      if (error) throw error;
+      
+      setIsManualItemModalOpen(false);
+      setManualItemForm({ patient_id: '', insurance_plan_id: '', procedure_id: '', service_date: new Date().toISOString().split('T')[0], guia_number: '', auth_number: '' });
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Erro ao salvar item manual:', error);
+      alert('Erro ao criar Pendência TISS. Verifique os dados.');
     } finally {
       setIsSaving(false);
     }
@@ -509,6 +553,15 @@ export default function BillingView({
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
+                {billingItems.length > 0 && (
+                  <button 
+                     onClick={() => setIsManualItemModalOpen(true)}
+                     className="px-6 py-3 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 hover:brightness-110 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+                  >
+                     <Plus size={20} />
+                     <span className="hidden sm:inline">Adicionar Manual</span>
+                  </button>
+                )}
               </div>
 
               {/* Items List */}
@@ -545,7 +598,7 @@ export default function BillingView({
                                 <h3 className="font-black text-on-surface">Nenhuma pendência encontrada</h3>
                                 <p className="text-sm text-on-surface-variant">Todos os atendimentos estão em dia ou não há faturamento pendente.</p>
                               </div>
-                              <button className="text-primary font-bold text-sm hover:underline mt-2">
+                              <button onClick={() => setIsManualItemModalOpen(true)} className="text-primary font-bold text-sm hover:underline mt-2">
                                 + Adicionar item manual
                               </button>
                             </div>
@@ -1205,6 +1258,65 @@ export default function BillingView({
               <div className="flex gap-3">
                 <button onClick={() => setGlossForm(null)} className="flex-1 py-3 border border-outline-variant/30 text-on-surface font-bold rounded-xl hover:bg-surface-container-low transition-all">Cancelar</button>
                 <button onClick={handleSaveGloss} className="flex-1 py-3 bg-rose-500 text-white font-bold rounded-xl hover:bg-rose-600 transition-all shadow-lg shadow-rose-500/20">Salvar Glosa</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isManualItemModalOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsManualItemModalOpen(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden p-8 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-2xl font-black text-on-surface mb-6">Novo Item de Faturamento Manual</h3>
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Paciente</label>
+                    <select value={manualItemForm.patient_id} onChange={e => setManualItemForm({...manualItemForm, patient_id: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none">
+                      <option value="">Selecione um paciente...</option>
+                      {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Plano do Paciente</label>
+                    <select value={manualItemForm.insurance_plan_id} onChange={e => setManualItemForm({...manualItemForm, insurance_plan_id: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none">
+                      <option value="">Selecione um plano...</option>
+                      {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Procedimento</label>
+                    <select value={manualItemForm.procedure_id} onChange={e => setManualItemForm({...manualItemForm, procedure_id: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none">
+                      <option value="">Selecione o procedimento realizado...</option>
+                      {procedures.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Data do Atendimento</label>
+                    <input type="date" value={manualItemForm.service_date} onChange={e => setManualItemForm({...manualItemForm, service_date: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Nº da Guia Física <span className="text-[10px] text-on-surface-variant font-normal">(Opcional)</span></label>
+                    <input type="text" value={manualItemForm.guia_number} onChange={e => setManualItemForm({...manualItemForm, guia_number: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none" placeholder="Ex: 0000000..." />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Senha de Autorização <span className="text-[10px] text-on-surface-variant font-normal">(Opcional)</span></label>
+                    <input type="text" value={manualItemForm.auth_number} onChange={e => setManualItemForm({...manualItemForm, auth_number: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none" placeholder="Senha do portal" />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => setIsManualItemModalOpen(false)} className="flex-1 py-4 border border-outline-variant/30 text-on-surface font-bold rounded-2xl hover:bg-surface-container-low transition-all">Cancelar</button>
+                  <button onClick={handleSaveManualItem} disabled={isSaving || !manualItemForm.patient_id || !manualItemForm.insurance_plan_id || !manualItemForm.procedure_id} className="flex-[2] py-4 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                    {isSaving ? 'Salvando...' : 'Adicionar Atendimento'}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
