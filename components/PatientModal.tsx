@@ -56,7 +56,7 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
   useEffect(() => {
     const fetchPlans = async () => {
       if (!supabase) return;
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from('insurance_plans')
         .select('*, insurer:insurers(name)')
         .order('name');
@@ -132,7 +132,7 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="relative bg-white w-full h-full md:h-auto md:max-w-2xl rounded-none md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col"
+            className="relative bg-white w-full h-full md:h-auto max-h-[100dvh] md:max-h-[90vh] md:max-w-2xl rounded-none md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col"
           >
             <div className="p-8 border-b border-outline-variant/10 flex justify-between items-center">
               <h3 className="text-2xl font-bold font-headline text-on-surface">
@@ -146,8 +146,9 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 md:p-8 flex-1 space-y-6 overflow-y-auto custom-scrollbar">
-              {/* Photo Upload Section */}
+            <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="p-6 md:p-8 flex-1 space-y-6 overflow-y-auto custom-scrollbar">
+                {/* Photo Upload Section */}
               <div className="flex flex-col items-center justify-center pb-6">
                 <div className="w-24 h-24 rounded-[2rem] bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl border border-primary/20">
                   {getInitials(formData.name)}
@@ -328,7 +329,9 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
                 </select>
               </div>
 
-              <div className="pt-6 flex gap-4">
+              </div>
+
+              <div className="p-6 md:p-8 border-t border-outline-variant/10 bg-slate-50/50 flex gap-4 shrink-0">
                 <button 
                   type="button"
                   onClick={onClose}
