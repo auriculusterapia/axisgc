@@ -88,6 +88,12 @@ export default function Home() {
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [protocols, setProtocols] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [billingItems, setBillingItems] = useState<any[]>([]);
+  const [billingBatches, setBillingBatches] = useState<any[]>([]);
+  const [insurers, setInsurers] = useState<any[]>([]);
+  const [insurancePlans, setInsurancePlans] = useState<any[]>([]);
+  const [insurancePrices, setInsurancePrices] = useState<any[]>([]);
+  const [procedures, setProcedures] = useState<any[]>([]);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [isConsultationModalOpen, setIsConsultationModalOpen] = useState(false);
   const [activeConsultation, setActiveConsultation] = useState<any>(null);
@@ -221,7 +227,13 @@ export default function Home() {
         { data: protocolsData },
         { data: inventoryData },
         { data: packagesData },
-        { data: financialTransactionsData }
+        { data: financialTransactionsData },
+        { data: billingItemsData },
+        { data: billingBatchesData },
+        { data: insurersData },
+        { data: insurancePlansData },
+        { data: insurancePricesData },
+        { data: proceduresData }
       ] = await Promise.all([
         (supabase as any).from('patients').select('*, patient_packages(status), insurance:patient_insurances(*)').order('name'),
         (supabase as any).from('appointments').select('*').order('date', { ascending: false }),
@@ -230,7 +242,13 @@ export default function Home() {
         (supabase as any).from('protocols').select('*').order('name'),
         (supabase as any).from('inventory_items').select('*').order('name'),
         (supabase as any).from('patient_packages').select('*').order('date', { ascending: false }),
-        (supabase as any).from('financial_transactions').select('*').order('date', { ascending: false })
+        (supabase as any).from('financial_transactions').select('*').order('date', { ascending: false }),
+        (supabase as any).from('billing_items').select('*, patient:patients(*), procedure:procedures(*)').order('created_at', { ascending: false }),
+        (supabase as any).from('billing_batches').select('*, insurer:insurers(*)').order('created_at', { ascending: false }),
+        (supabase as any).from('insurers').select('*').order('name'),
+        (supabase as any).from('insurance_plans').select('*').order('name'),
+        (supabase as any).from('insurance_prices').select('*, procedure:procedures(*), plan:insurance_plans(*)'),
+        (supabase as any).from('procedures').select('*').order('code')
       ]);
 
       if (patientsData) {
@@ -311,6 +329,14 @@ export default function Home() {
           amount: Number(t.amount || 0)
         })));
       }
+
+      if (billingItemsData) setBillingItems(billingItemsData as any[]);
+      if (billingBatchesData) setBillingBatches(billingBatchesData as any[]);
+      if (insurersData) setInsurers(insurersData as any[]);
+      if (insurancePlansData) setInsurancePlans(insurancePlansData as any[]);
+      if (insurancePricesData) setInsurancePrices(insurancePricesData as any[]);
+      if (proceduresData) setProcedures(proceduresData as any[]);
+
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -1447,7 +1473,7 @@ export default function Home() {
           />
         );
       case 'billing':
-        return <BillingView user={user} />;
+        return <BillingView user={user} onRefresh={fetchData} billingItems={billingItems} batches={billingBatches} insurers={insurers} plans={insurancePlans} prices={insurancePrices} procedures={procedures} loading={isDataLoading} />;
       default:
         return (
           <div className="flex items-center justify-center h-full">
