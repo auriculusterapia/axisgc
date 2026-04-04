@@ -88,7 +88,8 @@ export default function BillingView({
     if (!supabase || !user) return;
     setIsSaving(true);
     try {
-      const payload: any = { ...insurerForm, created_by: user.id };
+      const { logo_url, ...validInsurerForm } = insurerForm;
+      const payload: any = { ...validInsurerForm, created_by: user.id };
       if (editingItem?.id) payload.id = editingItem.id;
 
       const { error } = await (supabase as any).from('insurers').upsert([payload]);
@@ -109,7 +110,8 @@ export default function BillingView({
     if (!supabase || !user) return;
     setIsSaving(true);
     try {
-      const payload: any = { ...planForm, created_by: user.id };
+      const { type, ...validPlanForm } = planForm;
+      const payload: any = { ...validPlanForm, created_by: user.id };
       if (editingItem?.id) payload.id = editingItem.id;
 
       const { error } = await (supabase as any).from('insurance_plans').upsert([payload]);
