@@ -13,9 +13,13 @@ import {
   Calendar as CalendarIcon,
   MoreVertical,
   Trash2,
-  Edit2
+  Edit2,
+  ShieldCheck,
+  CreditCard,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { User as UserType } from '@/types/auth';
 
 interface Appointment {
   id: string;
@@ -29,6 +33,8 @@ interface Appointment {
   status: 'scheduled' | 'completed' | 'cancelled';
   price: number;
   paymentStatus: 'pendente' | 'pago';
+  isInsurance?: boolean;
+  planName?: string;
 }
 
 interface Patient {
@@ -41,8 +47,6 @@ interface ConsultationType {
   name: string;
   price: number;
 }
-
-import { User as UserType } from '@/types/auth';
 
 interface CalendarViewProps {
   forceOpenModal?: boolean;
@@ -254,6 +258,7 @@ export default function CalendarView({
                 className={`text-[10px] p-1 rounded border-l-2 truncate cursor-pointer transition-all hover:brightness-95 ${getAppointmentColor(app.type)}`}
               >
                 <span className="font-bold">{app.time}</span> {app.patientName}
+                {app.isInsurance && <ShieldCheck size={10} className="inline ml-1 text-primary opacity-80" />}
               </div>
             ))}
           </div>
@@ -300,9 +305,17 @@ export default function CalendarView({
                 }}
                 className={`p-3 rounded-xl border-l-4 shadow-sm cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${getAppointmentColor(app.type)}`}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <Clock size={12} />
-                  <span className="text-[10px] font-bold">{app.time}</span>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <div className="flex items-center gap-2">
+                    <Clock size={12} />
+                    <span className="text-[10px] font-bold">{app.time}</span>
+                  </div>
+                  {app.isInsurance && (
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 scale-90">
+                      <ShieldCheck size={10} />
+                      <span className="text-[8px] font-bold uppercase tracking-tighter">{app.planName?.split(' ')[0]}</span>
+                    </div>
+                  )}
                 </div>
                 <p className="text-xs font-bold truncate">{app.patientName}</p>
                 <p className="text-[10px] opacity-70 truncate">{app.duration} min</p>

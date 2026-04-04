@@ -48,6 +48,7 @@ export default function DashboardLayout({
       auricular: '/mapa-auricular',
       protocols: '/protocolos',
       financial: '/financeiro',
+      billing: '/faturamento',
       inventory: '/estoque',
       users: '/usuarios',
       settings: '/configuracoes',

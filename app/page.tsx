@@ -222,7 +222,7 @@ export default function Home() {
         { data: packagesData },
         { data: financialTransactionsData }
       ] = await Promise.all([
-        (supabase as any).from('patients').select('*, patient_packages(status)').order('name'),
+        (supabase as any).from('patients').select('*, patient_packages(status), insurance:patient_insurances(*)').order('name'),
         (supabase as any).from('appointments').select('*').order('date', { ascending: false }),
         (supabase as any).from('consultations').select('*').order('date', { ascending: false }),
         (supabase as any).from('evaluations').select('*').order('date', { ascending: false }),
@@ -238,17 +238,25 @@ export default function Home() {
           maritalStatus: p.marital_status || 'Solteiro(a)',
           avatar: p.avatar_url || '',
           lastVisit: p.last_visit || 'N/A',
-          hasActivePackage: Array.isArray(p.patient_packages) && p.patient_packages.some((pkg: any) => pkg.status === 'active')
+          hasActivePackage: Array.isArray(p.patient_packages) && p.patient_packages.some((pkg: any) => pkg.status === 'active'),
+          insurancePlanId: p.insurance?.plan_id || '',
+          insuranceCardNumber: p.insurance?.card_number || '',
+          insuranceValidity: p.insurance?.validity_date || ''
         })));
       }
       if (appointmentsData) {
-        setAppointments((appointmentsData as any[]).map(a => ({
-          ...a,
-          patientId: a.patient_id,
-          patientName: a.patient_name,
-          paymentStatus: a.payment_status,
-          price: Number(a.price || 0)
-        })));
+        setAppointments((appointmentsData as any[]).map(a => {
+          const patient = patientsData.find((p: any) => p.id === a.patient_id);
+          return {
+            ...a,
+            patientId: a.patient_id,
+            patientName: a.patient_name,
+            paymentStatus: a.payment_status,
+            price: Number(a.price || 0),
+            isInsurance: !!patient?.insurance,
+            planName: patient?.insurance?.insurance_plans?.name || 'Convênio'
+          };
+        }));
       }
       if (consultationsData) {
         setConsultations((consultationsData as any[]).map(c => ({
@@ -1588,6 +1596,19 @@ export default function Home() {
                 startTime: data.startTime,
                 endTime: data.endTime
               } : c));
+
+              // Update associated billing item if exists
+              if (data.procedureId) {
+                await (supabase as any)
+                  .from('billing_items')
+                  .update({
+                    procedure_id: data.procedureId,
+                    guia_number: data.guiaNumber,
+                    authorization_code: data.authCode,
+                    status: (data.guiaNumber && data.authCode) ? 'pending_review' : 'draft'
+                  })
+                  .eq('consultation_id', editingConsultation.id);
+              }
             } else {
               const { data: newConsultation, error } = await supabase
                 .from('consultations')
@@ -1610,6 +1631,23 @@ export default function Home() {
                 };
                 setConsultations(prev => [mappedConsultation, ...prev]);
                 
+                // Create Billing Item if insurance/procedure is selected
+                if (data.procedureId) {
+                  const billingItem = {
+                    patient_id: data.patientId,
+                    consultation_id: newConsultation.id,
+                    procedure_id: data.procedureId,
+                    plan_id: selectedPatient?.insurancePlanId,
+                    professional_id: user?.id,
+                    service_date: new Date(data.startTime).toISOString(),
+                    guia_number: data.guiaNumber,
+                    authorization_code: data.authCode,
+                    status: (data.guiaNumber && data.authCode) ? 'pending_review' : 'draft',
+                    created_by: user?.id
+                  };
+                  await (supabase as any).from('billing_items').insert([billingItem]);
+                }
+
                 // Update patient's last visit
                 const lastVisit = new Date(data.endTime).toISOString().split('T')[0];
                 await supabase

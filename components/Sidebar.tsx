@@ -38,6 +38,7 @@ const navItems = [
   { id: 'auricular', label: 'Mapa Auricular', icon: Sparkles },
   { id: 'protocols', label: 'Protocolos', icon: FileText },
   { id: 'financial', label: 'Financeiro', icon: CreditCard },
+  { id: 'billing', label: 'Faturamento', icon: FileText },
   { id: 'inventory', label: 'Estoque', icon: Package },
   { id: 'users', label: 'Usuários', icon: Users },
   { id: 'settings', label: 'Configurações', icon: Settings },

@@ -28,7 +28,7 @@ export default function PatientsPage() {
     try {
       const { data, error } = await supabase
         .from('patients')
-        .select('*, patient_packages(status)')
+        .select('*, patient_packages(status), insurance:patient_insurances(*, plan:insurance_plans(name, insurer:insurers(name)))')
         .order('name');
       
       if (error) throw error;
@@ -39,7 +39,11 @@ export default function PatientsPage() {
           maritalStatus: p.marital_status || 'Solteiro(a)',
           avatar: p.avatar_url || '',
           lastVisit: p.last_visit || 'N/A',
-          hasActivePackage: Array.isArray(p.patient_packages) && p.patient_packages.some((pkg: any) => pkg.status === 'active')
+          hasActivePackage: Array.isArray(p.patient_packages) && p.patient_packages.some((pkg: any) => pkg.status === 'active'),
+          // Map insurance data back to the format the modal expects
+          insurancePlanId: (p as any).insurance?.plan_id || '',
+          insuranceCardNumber: (p as any).insurance?.card_number || '',
+          insuranceValidity: (p as any).insurance?.validity_date || ''
         })));
       }
     } catch (error) {
@@ -74,6 +78,8 @@ export default function PatientsPage() {
         setTimeout(() => reject(new Error('Tempo limite excedido')), 15000);
       });
 
+      let patientId = editingPatient?.id;
+
       if (editingPatient) {
         const updateCall = supabase
           .from('patients')
@@ -98,13 +104,43 @@ export default function PatientsPage() {
 
         const { data: newPatient, error } = await Promise.race([insertCall, timeoutPromise]) as any;
         if (error) throw error;
+        patientId = newPatient.id;
 
         await logAction({
           action: 'CREATE',
           entityType: 'PATIENTS',
           userId: user.id,
-          details: { summary: `Novo paciente cadastrado: ${data.name}`, id: newPatient.id }
+          details: { summary: `Novo paciente cadastrado: ${data.name}`, id: patientId }
         });
+      }
+
+      // Handle Insurance Data
+      if (data.insurancePlanId) {
+        // Upsert insurance info
+        const insuranceData = {
+          patient_id: patientId,
+          plan_id: data.insurancePlanId,
+          card_number: data.insuranceCardNumber,
+          validity_date: data.insuranceValidity || null,
+          is_active: true,
+          created_by: user.id
+        };
+
+        const { data: insRecord, error: insError } = await (supabase as any)
+          .from('patient_insurances')
+          .upsert([insuranceData], { onConflict: 'patient_id, plan_id' })
+          .select()
+          .single();
+
+        if (!insError && insRecord) {
+          // Update patient with the active insurance ID
+          await (supabase.from('patients').update({ active_insurance_id: insRecord.id } as any) as any)
+            .eq('id', patientId);
+        }
+      } else if (editingPatient && editingPatient.active_insurance_id) {
+         // Clear insurance if it was removed
+         await (supabase.from('patients').update({ active_insurance_id: null } as any) as any)
+            .eq('id', patientId);
       }
       
       await fetchPatients();

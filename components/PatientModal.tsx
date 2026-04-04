@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Check, User } from 'lucide-react';
+import { X, Check, User, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getInitials } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import { InsurancePlan } from '@/types/billing';
 
 interface Patient {
   id: string;
@@ -18,6 +20,10 @@ interface Patient {
   status: 'Ativo' | 'Inativo';
   lastVisit: string;
   avatar: string;
+  // Insurance data
+  insurancePlanId?: string;
+  insuranceCardNumber?: string;
+  insuranceValidity?: string;
 }
 
 interface PatientModalProps {
@@ -29,6 +35,7 @@ interface PatientModalProps {
 
 export default function PatientModal({ isOpen, onClose, onSave, editingPatient }: PatientModalProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [plans, setPlans] = useState<InsurancePlan[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     age: '',
@@ -39,12 +46,25 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
     maritalStatus: 'Solteiro(a)',
     profession: '',
     status: 'Ativo' as 'Ativo' | 'Inativo',
-    avatar: ''
+    avatar: '',
+    // Insurance
+    insurancePlanId: '',
+    insuranceCardNumber: '',
+    insuranceValidity: ''
   });
 
   useEffect(() => {
+    const fetchPlans = async () => {
+      if (!supabase) return;
+      const { data } = await supabase
+        .from('insurance_plans')
+        .select('*, insurer:insurers(name)')
+        .order('name');
+      if (data) setPlans(data as any[]);
+    };
+
     if (isOpen) {
-      console.log('PatientModal opened. editingPatient:', editingPatient);
+      fetchPlans();
       setFormData({
         name: editingPatient?.name || '',
         age: editingPatient?.age?.toString() || '',
@@ -55,7 +75,10 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
         maritalStatus: editingPatient?.maritalStatus || 'Solteiro(a)',
         profession: editingPatient?.profession || '',
         status: editingPatient?.status || 'Ativo' as 'Ativo' | 'Inativo',
-        avatar: editingPatient?.avatar || ''
+        avatar: editingPatient?.avatar || '',
+        insurancePlanId: editingPatient?.insurancePlanId || '',
+        insuranceCardNumber: editingPatient?.insuranceCardNumber || '',
+        insuranceValidity: editingPatient?.insuranceValidity || ''
       });
     }
   }, [isOpen, editingPatient]);
@@ -236,8 +259,65 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
                 </div>
               </div>
 
+              <div className="space-y-6 pt-4">
+                <div className="flex items-center gap-2 border-b border-outline-variant/10 pb-2">
+                  <ShieldCheck size={18} className="text-primary" />
+                  <h4 className="text-sm font-black text-on-surface uppercase tracking-wider">Informações de Convênio</h4>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Plano de Saúde</label>
+                    <div className="relative group">
+                      <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors" size={18} />
+                      <select 
+                        value={formData.insurancePlanId}
+                        onChange={e => setFormData({...formData, insurancePlanId: e.target.value})}
+                        className="w-full pl-12 pr-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none"
+                      >
+                        <option value="">Particular / Nenhum</option>
+                        {plans.map(plan => (
+                          <option key={plan.id} value={plan.id}>
+                            {(plan as any).insurer?.name} - {plan.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-outline uppercase tracking-widest">Nº Carteirinha</label>
+                      <input 
+                        type="text" 
+                        value={formData.insuranceCardNumber}
+                        onChange={e => setFormData({...formData, insuranceCardNumber: e.target.value})}
+                        className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                        placeholder="0000000..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-outline uppercase tracking-widest">Validade</label>
+                      <input 
+                        type="date" 
+                        value={formData.insuranceValidity}
+                        onChange={e => setFormData({...formData, insuranceValidity: e.target.value})}
+                        className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {formData.insurancePlanId && !formData.insuranceCardNumber && (
+                   <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-xl text-amber-700 text-[10px] font-bold border border-amber-200 animate-in fade-in slide-in-from-top-1">
+                      <AlertCircle size={14} />
+                      Lembre-se de preencher o número da carteirinha para evitar pendências no faturamento.
+                   </div>
+                )}
+              </div>
+
               <div className="space-y-2">
-                <label className="text-xs font-bold text-outline uppercase tracking-widest">Status</label>
+                <label className="text-xs font-bold text-outline uppercase tracking-widest">Status do Cadastro</label>
                 <select 
                   value={formData.status}
                   onChange={e => setFormData({...formData, status: e.target.value as 'Ativo' | 'Inativo'})}

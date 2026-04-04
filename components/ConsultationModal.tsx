@@ -18,9 +18,14 @@ import {
   Play, 
   Square, 
   Minus, 
-  Package 
+  Package,
+  ShieldCheck,
+  CreditCard,
+  Hash
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase } from '@/lib/supabase';
+import { Procedure, InsurancePlan } from '@/types/billing';
 
 interface ConsultationModalProps {
   isOpen: boolean;
@@ -65,6 +70,31 @@ export default function ConsultationModal({
   const [hasConfirmedExtra, setHasConfirmedExtra] = useState(false);
   const [showExtraConfirmUI, setShowExtraConfirmUI] = useState(false);
   
+  // Billing fields
+  const [procedures, setProcedures] = useState<Procedure[]>([]);
+  const [selectedProcedureId, setSelectedProcedureId] = useState(editingConsultation?.procedureId || '');
+  const [guiaNumber, setGuiaNumber] = useState(editingConsultation?.guiaNumber || '');
+  const [authCode, setAuthCode] = useState(editingConsultation?.authCode || '');
+  const [isInsuranceConsultation, setIsInsuranceConsultation] = useState(!!patient?.insurancePlanId);
+
+  useEffect(() => {
+    const fetchProcedures = async () => {
+      if (!supabase) return;
+      const { data } = await (supabase as any).from('procedures').select('*').order('name');
+      if (data) setProcedures(data);
+    };
+    if (isOpen) {
+      fetchProcedures();
+      setIsInsuranceConsultation(!!patient?.insurancePlanId);
+      // If patient has insurance, try to auto-select a procedure if only one exists or if it's editing
+      if (editingConsultation) {
+        setSelectedProcedureId(editingConsultation.procedureId || '');
+        setGuiaNumber(editingConsultation.guiaNumber || '');
+        setAuthCode(editingConsultation.authCode || '');
+      }
+    }
+  }, [isOpen, patient, editingConsultation]);
+
   const [elapsedTime, setElapsedTime] = useState(() => {
     if (editingConsultation && editingConsultation.startTime && editingConsultation.endTime) {
       const start = new Date(editingConsultation.startTime).getTime();
@@ -138,11 +168,17 @@ export default function ConsultationModal({
       materials_used: usedMaterials,
       patientId: patient.id,
       id: editingConsultation?.id,
-      is_unscheduled: isUnscheduledCandidate
+      is_unscheduled: isUnscheduledCandidate,
+      // Billing integration
+      procedureId: selectedProcedureId,
+      guiaNumber,
+      authCode,
+      isInsurance: isInsuranceConsultation
     });
     
     onClose();
   };
+
 
   if (!isOpen) return null;
 
@@ -277,6 +313,107 @@ export default function ConsultationModal({
                         </>
                       )}
                     </select>
+                  </div>
+
+                  {/* Billing / Insurance Section */}
+                  <div className="space-y-4 pt-4 border-t border-outline-variant/10">
+                    <div className="flex items-center justify-between">
+                      <label 
+                        className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 transition-colors ${isInsuranceConsultation ? 'text-primary' : 'text-outline'}`}
+                      >
+                        <ShieldCheck size={14} /> Atendimento via Convênio
+                      </label>
+                      <button 
+                        type="button"
+                        onClick={() => setIsInsuranceConsultation(!isInsuranceConsultation)}
+                        className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border transition-all ${
+                          isInsuranceConsultation 
+                            ? 'bg-primary/10 border-primary/20 text-primary' 
+                            : 'bg-surface-container-low border-outline-variant/20 text-outline'
+                        }`}
+                      >
+                        {isInsuranceConsultation ? 'Ativado' : 'Ativar'}
+                      </button>
+                    </div>
+
+                    <AnimatePresence>
+                      {isInsuranceConsultation && (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-4 overflow-hidden"
+                        >
+                          {patient?.insurancePlanId ? (
+                            <div className="p-3 bg-primary/5 rounded-xl border border-primary/10 flex items-center gap-3">
+                              <CreditCard size={16} className="text-primary" />
+                              <div className="flex-1">
+                                <p className="text-[10px] font-bold text-outline-variant uppercase tracking-widest leading-none mb-1">Convênio do Paciente</p>
+                                <p className="text-xs font-bold text-on-surface">
+                                  {patient.insuranceCardNumber || 'Sem carteirinha'}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-center gap-3 text-amber-700">
+                              <AlertCircle size={16} />
+                              <p className="text-[10px] font-bold">Paciente sem convênio vinculado. Informe os dados abaixo para faturar avulso.</p>
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-outline uppercase tracking-widest flex items-center gap-1.5">
+                              Procedimento (TUSS)
+                            </label>
+                            <select 
+                              value={selectedProcedureId}
+                              onChange={e => setSelectedProcedureId(e.target.value)}
+                              className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium text-sm appearance-none"
+                            >
+                              <option value="">Selecionar procedimento...</option>
+                              {procedures.map(proc => (
+                                <option key={proc.id} value={proc.id}>
+                                  {proc.code} - {proc.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-xs font-bold text-outline uppercase tracking-widest flex items-center gap-1.5">
+                                <Hash size={12} /> Nº Guia
+                              </label>
+                              <input 
+                                type="text"
+                                value={guiaNumber}
+                                onChange={e => setGuiaNumber(e.target.value)}
+                                className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium text-sm"
+                                placeholder="00000..."
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs font-bold text-outline uppercase tracking-widest flex items-center gap-1.5">
+                                Cod. Autorização
+                              </label>
+                              <input 
+                                type="text"
+                                value={authCode}
+                                onChange={e => setAuthCode(e.target.value)}
+                                className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium text-sm"
+                                placeholder="00000..."
+                              />
+                            </div>
+                          </div>
+                          
+                          {(!guiaNumber || !authCode) && (
+                            <p className="text-[9px] text-amber-600 font-bold flex items-center gap-1 px-1">
+                              <AlertCircle size={10} /> O item será salvo como RASCUNHO na fila de faturamento.
+                            </p>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <div className="space-y-2">

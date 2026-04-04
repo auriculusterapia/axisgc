@@ -113,6 +113,17 @@ export const ALL_PERMISSIONS: Permission[] = [
     ]
   },
   { 
+    id: 'billing', 
+    label: 'Faturamento',
+    sub: [
+      { id: 'billing:view', label: 'Visualizar Itens/Lotes' },
+      { id: 'billing:setup', label: 'Configurar Operadoras/Preços' },
+      { id: 'billing:audit', label: 'Conferir/Auditar Itens' },
+      { id: 'billing:batch', label: 'Gestão de Lotes' },
+      { id: 'billing:finance', label: 'Pagamentos e Glosas' }
+    ]
+  },
+  { 
     id: 'settings', 
     label: 'Configurações',
     sub: [
@@ -154,6 +165,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'auricular', 'auricular:view', 'auricular:edit',
     'protocols', 'protocols:view', 'protocols:create', 'protocols:edit',
     'inventory', 'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete',
+    'billing', 'billing:view', 'billing:audit',
     'reports', 'reports:view', 'reports:export',
     'settings', 'settings:profile'
   ],
@@ -162,6 +174,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'patients', 'patients:view', 'patients:create',
     'calendar', 'calendar:view', 'calendar:create', 'calendar:edit',
     'inventory', 'inventory:view', 'inventory:create', 'inventory:edit',
+    'billing', 'billing:view', 'billing:audit', 'billing:finance',
     'settings', 'settings:profile'
   ],
 };
