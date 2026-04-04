@@ -5,7 +5,8 @@ import { X, Check, User, CreditCard, ShieldCheck, AlertCircle } from 'lucide-rea
 import { motion, AnimatePresence } from 'motion/react';
 import { getInitials } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import { InsurancePlan } from '@/types/billing';
+import { InsurancePlan, Insurer } from '@/types/billing';
+import { Plus } from 'lucide-react';
 
 interface Patient {
   id: string;
@@ -21,6 +22,10 @@ interface Patient {
   lastVisit: string;
   avatar: string;
   // Insurance data
+  // Insurance data
+  insurerId?: string;
+  insurancePlanName?: string;
+  insuranceSubplan?: string;
   insurancePlanId?: string;
   insuranceCardNumber?: string;
   insuranceValidity?: string;
@@ -35,7 +40,10 @@ interface PatientModalProps {
 
 export default function PatientModal({ isOpen, onClose, onSave, editingPatient }: PatientModalProps) {
   const [isSaving, setIsSaving] = useState(false);
-  const [plans, setPlans] = useState<InsurancePlan[]>([]);
+  const [insurers, setInsurers] = useState<Insurer[]>([]);
+  const [isNewInsurerModalOpen, setIsNewInsurerModalOpen] = useState(false);
+  const [newInsurerName, setNewInsurerName] = useState('');
+  const [isSavingInsurer, setIsSavingInsurer] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     age: '',
@@ -48,23 +56,27 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
     status: 'Ativo' as 'Ativo' | 'Inativo',
     avatar: '',
     // Insurance
+    // Insurance
+    insurerId: '',
+    insurancePlanName: '',
+    insuranceSubplan: '',
     insurancePlanId: '',
     insuranceCardNumber: '',
     insuranceValidity: ''
   });
 
   useEffect(() => {
-    const fetchPlans = async () => {
+    const fetchInsurers = async () => {
       if (!supabase) return;
       const { data } = await (supabase as any)
-        .from('insurance_plans')
-        .select('*, insurer:insurers(name)')
+        .from('insurers')
+        .select('*')
         .order('name');
-      if (data) setPlans(data as any[]);
+      if (data) setInsurers(data as any[]);
     };
 
     if (isOpen) {
-      fetchPlans();
+      fetchInsurers();
       setFormData({
         name: editingPatient?.name || '',
         age: editingPatient?.age?.toString() || '',
@@ -76,12 +88,40 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
         profession: editingPatient?.profession || '',
         status: editingPatient?.status || 'Ativo' as 'Ativo' | 'Inativo',
         avatar: editingPatient?.avatar || '',
+        insurerId: editingPatient?.insurerId || '',
+        insurancePlanName: editingPatient?.insurancePlanName || '',
+        insuranceSubplan: editingPatient?.insuranceSubplan || '',
         insurancePlanId: editingPatient?.insurancePlanId || '',
         insuranceCardNumber: editingPatient?.insuranceCardNumber || '',
         insuranceValidity: editingPatient?.insuranceValidity || ''
       });
     }
   }, [isOpen, editingPatient]);
+
+  const handleSaveNewInsurer = async () => {
+    if (!newInsurerName.trim() || !supabase) return;
+    setIsSavingInsurer(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('insurers')
+        .insert([{ name: newInsurerName.trim() }])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      if (data) {
+        setInsurers(prev => [...prev, data].sort((a: any,b: any) => a.name.localeCompare(b.name)));
+        setFormData(prev => ({ ...prev, insurerId: data.id }));
+        setIsNewInsurerModalOpen(false);
+        setNewInsurerName('');
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('Erro ao criar operadora.');
+    } finally {
+      setIsSavingInsurer(false);
+    }
+  };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -105,8 +145,34 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
 
     setIsSaving(true);
     try {
+      let finalPlanId = formData.insurancePlanId;
+      
+      // Lazy Create Plan
+      if (formData.insurerId && formData.insurancePlanName && supabase) {
+        const planFullName = formData.insuranceSubplan 
+          ? `${formData.insurancePlanName} - ${formData.insuranceSubplan}` 
+          : formData.insurancePlanName;
+          
+        const { data: existing } = await (supabase as any).from('insurance_plans')
+          .select('id')
+          .eq('insurer_id', formData.insurerId)
+          .eq('name', planFullName)
+          .single();
+
+        if (existing) {
+          finalPlanId = existing.id;
+        } else {
+          const { data: newPlan } = await (supabase as any).from('insurance_plans')
+            .insert([{ insurer_id: formData.insurerId, name: planFullName }])
+            .select()
+            .single();
+          if (newPlan) finalPlanId = newPlan.id;
+        }
+      }
+
       await onSave({
         ...formData,
+        insurancePlanId: finalPlanId,
         age: age,
       });
     } catch (error: any) {
@@ -268,48 +334,80 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Plano de Saúde</label>
-                    <div className="relative group">
-                      <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors" size={18} />
-                      <select 
-                        value={formData.insurancePlanId}
-                        onChange={e => setFormData({...formData, insurancePlanId: e.target.value})}
-                        className="w-full pl-12 pr-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none"
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Operadora</label>
+                    <div className="flex gap-2">
+                      <div className="relative group flex-1">
+                        <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors" size={18} />
+                        <select 
+                          value={formData.insurerId}
+                          onChange={e => setFormData({...formData, insurerId: e.target.value})}
+                          className="w-full pl-12 pr-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none"
+                        >
+                          <option value="">Particular / Nenhuma</option>
+                          {insurers.map(insurer => (
+                            <option key={insurer.id} value={insurer.id}>{insurer.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button 
+                         type="button" 
+                         onClick={() => setIsNewInsurerModalOpen(true)}
+                         className="px-4 bg-surface-container-low border border-outline-variant/10 rounded-xl hover:bg-primary/5 text-primary transition-colors"
                       >
-                        <option value="">Particular / Nenhum</option>
-                        {plans.map(plan => (
-                          <option key={plan.id} value={plan.id}>
-                            {(plan as any).insurer?.name} - {plan.name}
-                          </option>
-                        ))}
-                      </select>
+                         <Plus size={20} />
+                      </button>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-outline uppercase tracking-widest">Nº Carteirinha</label>
-                      <input 
-                        type="text" 
-                        value={formData.insuranceCardNumber}
-                        onChange={e => setFormData({...formData, insuranceCardNumber: e.target.value})}
-                        className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
-                        placeholder="0000000..."
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-outline uppercase tracking-widest">Validade</label>
-                      <input 
-                        type="date" 
-                        value={formData.insuranceValidity}
-                        onChange={e => setFormData({...formData, insuranceValidity: e.target.value})}
-                        className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
-                      />
-                    </div>
+                  {formData.insurerId && (
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-outline uppercase tracking-widest">Nome do Plano</label>
+                          <input 
+                            type="text" 
+                            value={formData.insurancePlanName}
+                            onChange={e => setFormData({...formData, insurancePlanName: e.target.value})}
+                            className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                            placeholder="Ex: Ideal, Preferencial"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-outline uppercase tracking-widest">Subplano</label>
+                          <input 
+                            type="text" 
+                            value={formData.insuranceSubplan}
+                            onChange={e => setFormData({...formData, insuranceSubplan: e.target.value})}
+                            className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                            placeholder="Ex: S380 Enfermaria"
+                          />
+                        </div>
+                     </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Nº Carteirinha</label>
+                    <input 
+                      type="text" 
+                      value={formData.insuranceCardNumber}
+                      onChange={e => setFormData({...formData, insuranceCardNumber: e.target.value})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                      placeholder="0000000..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Validade</label>
+                    <input 
+                      type="date" 
+                      value={formData.insuranceValidity}
+                      onChange={e => setFormData({...formData, insuranceValidity: e.target.value})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                    />
                   </div>
                 </div>
 
-                {formData.insurancePlanId && !formData.insuranceCardNumber && (
+                {formData.insurerId && !formData.insuranceCardNumber && (
                    <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-xl text-amber-700 text-[10px] font-bold border border-amber-200 animate-in fade-in slide-in-from-top-1">
                       <AlertCircle size={14} />
                       Lembre-se de preencher o número da carteirinha para evitar pendências no faturamento.
@@ -356,6 +454,40 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
           </motion.div>
         </div>
       )}
+
+      {isNewInsurerModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-sm m-4">
+            <h4 className="font-bold text-lg mb-4 text-on-surface">Nova Operadora</h4>
+            <input 
+              type="text"
+              value={newInsurerName}
+              onChange={e => setNewInsurerName(e.target.value)}
+              placeholder="Nome da Operadora (ex: Bradesco, Amil)"
+              className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/20 mb-4 outline-none focus:ring-2 focus:ring-primary/30"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button 
+                type="button" 
+                onClick={() => setIsNewInsurerModalOpen(false)}
+                className="flex-1 py-3 text-outline font-bold hover:bg-surface-container-low rounded-xl transition-all"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button"
+                onClick={handleSaveNewInsurer}
+                disabled={!newInsurerName.trim() || isSavingInsurer}
+                className="flex-1 py-3 bg-primary text-white font-bold rounded-xl shadow-lg hover:opacity-90 disabled:opacity-50 transition-all flex justify-center items-center"
+              >
+                {isSavingInsurer ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </AnimatePresence>
   );
 }
