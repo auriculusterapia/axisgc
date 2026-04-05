@@ -30,6 +30,7 @@ interface Patient {
   insurancePlanId?: string;
   insuranceCardNumber?: string;
   insuranceValidity?: string;
+  metadata?: any;
 }
 
 interface PatientModalProps {
@@ -64,7 +65,8 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
     insuranceSubplan: '',
     insurancePlanId: '',
     insuranceCardNumber: '',
-    insuranceValidity: ''
+    insuranceValidity: '',
+    metadata: {} as any
   });
 
   useEffect(() => {
@@ -96,7 +98,8 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
         insuranceSubplan: editingPatient?.insuranceSubplan || '',
         insurancePlanId: editingPatient?.insurancePlanId || '',
         insuranceCardNumber: editingPatient?.insuranceCardNumber || '',
-        insuranceValidity: editingPatient?.insuranceValidity || ''
+        insuranceValidity: editingPatient?.insuranceValidity || '',
+        metadata: editingPatient?.metadata || {}
       });
     }
   }, [isOpen, editingPatient]);
@@ -448,6 +451,24 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
                   <option value="Inativo">Inativo</option>
                 </select>
               </div>
+
+              {/* Dynamic Metadata Section */}
+              {formData.metadata && Object.keys(formData.metadata).length > 0 && (
+                <div className="space-y-6 pt-4 border-t border-outline-variant/10">
+                  <div className="flex items-center gap-2 pb-2">
+                    <Info size={18} className="text-primary" />
+                    <h4 className="text-sm font-black text-on-surface uppercase tracking-wider">Informações Adicionais (Planilha)</h4>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {Object.entries(formData.metadata).map(([key, value]) => (
+                      <div key={key} className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/5">
+                        <label className="text-[10px] font-black text-outline uppercase tracking-widest block mb-1">{key}</label>
+                        <p className="text-sm font-bold text-on-surface truncate">{String(value)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               </div>
 

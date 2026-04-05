@@ -30,6 +30,8 @@ export default function Home() {
   const [parsedData, setParsedData] = useState<any[]>([]);
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<any[][]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isTruncateModalOpen, setIsTruncateModalOpen] = useState(false);
   const [truncateConfirm, setTruncateConfirm] = useState("");
 
@@ -63,6 +65,16 @@ export default function Home() {
 
   useEffect(() => {
     fetchDbStats();
+    
+    // Capturar usuário logado para RLS
+    const getAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user) {
+        setUserId(data.session.user.id);
+      }
+    };
+    getAuth();
+
     const interval = setInterval(fetchDbStats, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -219,7 +231,10 @@ export default function Home() {
 
       const row = parsedData[i];
       let table = "";
-      let insertData: any = { updated_at: new Date().toISOString() };
+      let insertData: any = { 
+        updated_at: new Date().toISOString(),
+        created_by: userId 
+      };
       let onConflict = "id";
 
       if (activeTab === "procedures") {
@@ -286,6 +301,7 @@ export default function Home() {
     setStats({ success: successCount, errors: errorCount });
     addLog(`🏁 Carga concluída: ${successCount} sucessos, ${errorCount} erros.`);
     setStage("DONE");
+    setShowSuccessModal(true);
     fetchDbStats();
   };
 
@@ -603,6 +619,27 @@ export default function Home() {
                  </div>
               </div>
            </div>
+        </div>
+      )}
+      {/* Modal de Sucesso */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowSuccessModal(false)}></div>
+          <div className="relative bg-neutral-900 border border-emerald-500/30 p-10 rounded-[2.5rem] max-w-md w-full text-center shadow-2xl shadow-emerald-500/10 scale-in-center">
+            <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-400">
+              <CheckCircle size={40} />
+            </div>
+            <h3 className="text-3xl font-black text-white mb-4 italic tracking-tighter">MISSÃO CUMPRIDA!</h3>
+            <p className="text-neutral-400 mb-8 font-medium leading-relaxed">
+              Os dados foram processados e já estão <span className="text-emerald-400 font-bold italic">vinculados ao seu usuário</span>. Você já pode visualizá-los no Dashboard principal.
+            </p>
+            <button 
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full py-4 bg-emerald-500 text-neutral-950 font-black rounded-2xl hover:bg-emerald-400 transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-emerald-500/20"
+            >
+              EXCELENTE
+            </button>
+          </div>
         </div>
       )}
 
