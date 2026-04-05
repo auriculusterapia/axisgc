@@ -195,15 +195,23 @@ export default function BillingView({
 
          // Ignora linhas que não parecem com itens faturáveis (ex: cabeçalhos extras)
          if (code && name && code.toString().trim() !== '' && name.toString().trim() !== '') {
-            const { error } = await (supabase as any).from('medical_supplies').upsert({
+            const table = activePricesTab === 'procedures' ? 'procedures' : 'medical_supplies';
+            const baseData = {
                code: code.toString().trim(),
                name: name.toString().trim(),
-               presentation: presentation?.toString().trim() || '',
-               laboratory: laboratory?.toString().trim() || '',
-               anvisa_registry: anvisa?.toString().trim() || '',
-               category: activePricesTab === 'procedures' ? 'tuss' : 'medicamento',
                updated_at: new Date().toISOString()
-            }, {
+            };
+            const insertData = activePricesTab === 'procedures' 
+               ? { ...baseData, category: 'tuss' }
+               : { 
+                  ...baseData, 
+                  presentation: presentation?.toString().trim() || '',
+                  laboratory: laboratory?.toString().trim() || '',
+                  anvisa_registry: anvisa?.toString().trim() || '',
+                  category: 'medicamento'
+               };
+
+            const { error } = await (supabase as any).from(table).upsert(insertData, {
                onConflict: 'code'
             });
             if (!error) {
@@ -1082,16 +1090,25 @@ export default function BillingView({
                         </p>
                       </div>
                     ) : (
-                      procedures.map((proc: Procedure) => (
-                        <div key={proc.id} className="bg-white p-6 rounded-3xl border border-outline-variant/20 shadow-sm hover:shadow-xl transition-all">
-                          <div className="flex justify-between items-start mb-4">
-                            <span className="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-bold uppercase">{proc.category || 'TUSS'}</span>
-                            <button className="p-2 hover:bg-surface-container rounded-xl transition-all"><MoreVertical size={16} /></button>
+                      <>
+                        {procedures.slice(0, 50).map((proc: Procedure) => (
+                          <div key={proc.id} className="bg-white p-6 rounded-3xl border border-outline-variant/20 shadow-sm hover:shadow-xl transition-all">
+                            <div className="flex justify-between items-start mb-4">
+                              <span className="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-bold uppercase">{proc.category || 'TUSS'}</span>
+                              <button className="p-2 hover:bg-surface-container rounded-xl transition-all"><MoreVertical size={16} /></button>
+                            </div>
+                            <h4 className="font-black text-on-surface">{proc.name}</h4>
+                            <p className="text-xs font-mono text-primary font-bold mt-1">Código: {proc.code}</p>
                           </div>
-                          <h4 className="font-black text-on-surface">{proc.name}</h4>
-                          <p className="text-xs font-mono text-primary font-bold mt-1">Código: {proc.code}</p>
-                        </div>
-                      ))
+                        ))}
+                        {procedures.length > 50 && (
+                          <div className="col-span-full py-4 text-center mt-4">
+                            <span className="text-sm font-bold text-on-surface-variant">
+                              Mostrando 50 de {procedures.length} procedimentos carregados... (Use a busca para filtrar)
+                            </span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -1124,17 +1141,26 @@ export default function BillingView({
                                   </td>
                                </tr>
                              ) : (
-                               medicalSupplies.map(supply => (
-                                 <tr key={supply.id} className="hover:bg-surface-container-lowest transition-colors">
-                                   <td className="px-5 py-3 font-mono text-xs font-bold text-primary">{supply.code}</td>
-                                   <td className="px-5 py-3 text-sm font-bold text-on-surface">
-                                      {supply.name}
-                                      <div className="text-[10px] text-on-surface-variant uppercase font-normal">{supply.laboratory}</div>
-                                   </td>
-                                   <td className="px-5 py-3 text-xs text-on-surface-variant">{supply.presentation || '---'}</td>
-                                   <td className="px-5 py-3 text-xs text-on-surface-variant font-mono">{supply.anvisa_registry || '---'}</td>
-                                 </tr>
-                               ))
+                               <>
+                                 {medicalSupplies.slice(0, 50).map(supply => (
+                                   <tr key={supply.id} className="hover:bg-surface-container-lowest transition-colors">
+                                     <td className="px-5 py-3 font-mono text-xs font-bold text-primary">{supply.code}</td>
+                                     <td className="px-5 py-3 text-sm font-bold text-on-surface">
+                                        {supply.name}
+                                        <div className="text-[10px] text-on-surface-variant uppercase font-normal">{supply.laboratory}</div>
+                                     </td>
+                                     <td className="px-5 py-3 text-xs text-on-surface-variant">{supply.presentation || '---'}</td>
+                                     <td className="px-5 py-3 text-xs text-on-surface-variant font-mono">{supply.anvisa_registry || '---'}</td>
+                                   </tr>
+                                 ))}
+                                 {medicalSupplies.length > 50 && (
+                                   <tr>
+                                     <td colSpan={4} className="px-5 py-4 text-center font-bold text-sm text-on-surface-variant">
+                                        Mostrando 50 de {medicalSupplies.length} registros...
+                                     </td>
+                                   </tr>
+                                 )}
+                               </>
                              )}
                            </tbody>
                         </table>
