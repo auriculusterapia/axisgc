@@ -30,7 +30,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { User } from '@/types/auth';
 import { BillingItem, BillingBatch, Insurer, InsurancePlan, InsurancePrice, BillingItemStatus, Procedure, MedicalSupply } from '@/types/billing';
 import { supabase } from '@/lib/supabase';
-import * as XLSX from 'xlsx';
 
 interface BillingViewProps {
   user: User;
@@ -62,8 +61,6 @@ export default function BillingView({
   const [activeTab, setActiveTab] = useState<'pendencies' | 'batches' | 'analytics' | 'insurers' | 'prices'>('pendencies');
   const [activePricesTab, setActivePricesTab] = useState<'procedures' | 'medicalSupplies'>('procedures');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isImporting, setIsImporting] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -161,75 +158,6 @@ export default function BillingView({
       alert('Erro ao salvar procedimento.');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !supabase) return;
-    setIsImporting(true);
-
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<any>(worksheet);
-
-      let upsertCount = 0;
-      
-      for (const row of json) {
-         // Parse headers properly avoiding case or space issues
-         const keys = Object.keys(row);
-         const normalize = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-         
-         const findVal = (keywords: string[]) => {
-            const matchedKey = keys.find(k => keywords.some(kw => normalize(k).includes(kw)));
-            return matchedKey ? row[matchedKey] : undefined;
-         };
-
-         const code = findVal(['codigo do termo', 'codigo', 'cod']);
-         const name = findVal(['termo', 'nome', 'descricao']);
-         const presentation = findVal(['apresentacao']);
-         const laboratory = findVal(['laboratorio']);
-         const anvisa = findVal(['anvisa', 'registro']);
-
-         // Ignora linhas que não parecem com itens faturáveis (ex: cabeçalhos extras)
-         if (code && name && code.toString().trim() !== '' && name.toString().trim() !== '') {
-            const table = activePricesTab === 'procedures' ? 'procedures' : 'medical_supplies';
-            const baseData = {
-               code: code.toString().trim(),
-               name: name.toString().trim(),
-               updated_at: new Date().toISOString()
-            };
-            const insertData = activePricesTab === 'procedures' 
-               ? { ...baseData, category: 'tuss' }
-               : { 
-                  ...baseData, 
-                  presentation: presentation?.toString().trim() || '',
-                  laboratory: laboratory?.toString().trim() || '',
-                  anvisa_registry: anvisa?.toString().trim() || '',
-                  category: 'medicamento'
-               };
-
-            const { error } = await (supabase as any).from(table).upsert(insertData, {
-               onConflict: 'code'
-            });
-            if (!error) {
-               upsertCount++;
-            } else {
-               console.error('Upsert erro no item:', code, error);
-            }
-         }
-      }
-
-      alert(`Importação concluída. ${upsertCount} registros atualizados com sucesso!`);
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      console.error('Erro na importação:', err);
-      alert('Erro ao processar a planilha. Verifique as colunas (Código do Termo e Termo são obrigatórias).');
-    } finally {
-      setIsImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -1052,28 +980,7 @@ export default function BillingView({
                   </div>
                   
                   <div className="flex items-center gap-3 px-2">
-                    {/* Add CSV Upload button */}
-                    <div className="relative overflow-hidden">
-                      <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        onChange={handleFileUpload} 
-                        accept=".xlsx, .xls, .csv" 
-                        className="hidden" 
-                      />
-                      <button 
-                         onClick={() => fileInputRef.current?.click()}
-                         disabled={isImporting}
-                         className="flex items-center gap-2 px-4 py-2 bg-surface-container-highest text-on-surface font-bold rounded-xl hover:bg-outline-variant/20 transition-all text-sm group disabled:opacity-50"
-                      >
-                        {isImporting ? (
-                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <Plus size={16} className="group-hover:text-primary transition-colors" />
-                        )}
-                        {isImporting ? 'Importando...' : 'Importar Planilha'}
-                      </button>
-                    </div>
+                    {/* Botões de filtro futuramente podem entrar aqui */}
                   </div>
                 </div>
 
