@@ -1,26 +1,70 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
-import { Upload, FileSpreadsheet, Package, DatabaseZap, Play, XSquare, CheckCircle } from "lucide-react";
+import { 
+  Upload, FileSpreadsheet, Package, DatabaseZap, Play, XSquare, 
+  CheckCircle, Trash2, Users, BarChart3, Info, Settings, 
+  ChevronRight, AlertTriangle, Terminal as TerminalIcon, RefreshCw
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
+
+type Category = "procedures" | "medical_supplies" | "inventory" | "patients";
 
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<boolean>(false);
   
-  const [activeTab, setActiveTab] = useState<"procedures" | "medical_supplies">("procedures");
+  const [activeTab, setActiveTab] = useState<Category>("procedures");
   const [logs, setLogs] = useState<string[]>([]);
   const [stats, setStats] = useState({ success: 0, errors: 0 });
+  const [dbStats, setDbStats] = useState<Record<Category, number>>({
+    procedures: 0,
+    medical_supplies: 0,
+    inventory: 0,
+    patients: 0
+  });
   
-  // Fases do processo: "IDLE" -> "READY" -> "IMPORTING" -> "DONE"
   const [stage, setStage] = useState<"IDLE" | "READY" | "IMPORTING" | "DONE">("IDLE");
   const [fileName, setFileName] = useState("");
   const [parsedData, setParsedData] = useState<any[]>([]);
+  const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
+  const [isTruncateModalOpen, setIsTruncateModalOpen] = useState(false);
+  const [truncateConfirm, setTruncateConfirm] = useState("");
 
   const addLog = (msg: string) => {
-    setLogs((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
+    setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${msg}`, ...prev].slice(0, 100));
   };
+
+  const fetchDbStats = async () => {
+    const fetchCount = async (table: string) => {
+      const { count } = await supabase.from(table).select("*", { count: "exact", head: true });
+      return count || 0;
+    };
+
+    try {
+      const [proc, supp, inv, pat] = await Promise.all([
+        fetchCount("procedures"),
+        fetchCount("medical_supplies"),
+        fetchCount("inventory_items"),
+        fetchCount("patients")
+      ]);
+      setDbStats({
+        procedures: proc,
+        medical_supplies: supp,
+        inventory: inv,
+        patients: pat
+      });
+    } catch (err) {
+      console.error("Erro ao buscar stats:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchDbStats();
+    const interval = setInterval(fetchDbStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleFileSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -29,7 +73,7 @@ export default function Home() {
     setFileName(file.name);
     setLogs([]);
     setStats({ success: 0, errors: 0 });
-    addLog(`Lendo arquivo: ${file.name}... Aguarde.`);
+    addLog(`🔍 Analisando arquivo: ${file.name}...`);
     
     try {
       const data = await file.arrayBuffer();
@@ -38,35 +82,38 @@ export default function Home() {
       
       const rawData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, blankrows: false });
       
-      // Palavras-chave para identificar o cabeçalho real
-      const headerKeywords = ["codigo", "termo", "anvisa", "laboratorio", "produto", "nome", "descricao", "registro"];
+      // Palavras-chave aprimoradas por categoria
+      const keywordsMap: Record<Category, string[]> = {
+        procedures: ["codigo", "termo", "tuss", "procedimento"],
+        medical_supplies: ["codigo", "anvisa", "laboratorio", "produto", "apresentacao"],
+        inventory: ["nome", "quantidade", "estoque", "unidade", "custo", "validade"],
+        patients: ["nome", "idade", "sexo", "telefone", "celular", "email", "endereco", "cpf"]
+      };
+
+      const headerKeywords = keywordsMap[activeTab];
       let headerIndex = -1;
       let maxScore = 0;
 
-      // Analisa as primeiras 30 linhas buscando a que mais se parece com um cabeçalho TUSS
       for (let i = 0; i < Math.min(rawData.length, 30); i++) {
         const rowArray = rawData[i] || [];
         let rowScore = 0;
-        
         rowArray.forEach(cell => {
           if (cell) {
             const norm = cell.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
             if (headerKeywords.some(kw => norm.includes(kw))) rowScore++;
           }
         });
-
         if (rowScore > maxScore) {
           maxScore = rowScore;
           headerIndex = i;
         }
       }
 
-      // Fallback caso a pontuação seja muito baixa
-      if (headerIndex === -1 || maxScore < 2) {
+      if (headerIndex === -1 || maxScore < 1) {
         for (let i = 0; i < Math.min(rawData.length, 30); i++) {
           const rowArray = rawData[i] || [];
           const filled = rowArray.filter(c => c !== null && c !== undefined && c.toString().trim() !== "");
-          if (filled.length >= 3) {
+          if (filled.length >= 2) {
             headerIndex = i;
             break;
           }
@@ -74,320 +121,452 @@ export default function Home() {
       }
 
       const headers = rawData[headerIndex] || [];
-      const json = [];
+      setPreviewHeaders(headers.map(h => h?.toString() || ""));
       
-      // Limpa e normaliza os cabeçalhos para o mapeamento
       const normHeaders = headers.map(h => 
         h ? h.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() : ""
       );
 
-      // Função auxiliar para encontrar índice de coluna com prioridade de exatidão
       const getIdx = (keywords: string[]) => {
-        // 1. Tenta correspondência exata primeiro
         const exact = normHeaders.findIndex(h => keywords.includes(h));
         if (exact !== -1) return exact;
-        // 2. Tenta correspondência parcial (começa com)
         const starts = normHeaders.findIndex(h => keywords.some(kw => h.startsWith(kw)));
         if (starts !== -1) return starts;
-        // 3. Tenta inclusão genérica
         return normHeaders.findIndex(h => keywords.some(kw => h.includes(kw)));
       };
 
-      // Mapeia os índices uma única vez
-      const colMap = {
-        code: getIdx(["codigo do termo", "codigo", "cod", "tuss", "produto"]),
-        // Para "name", evitamos que "termo" pegue "codigo do termo" priorizando exatidão
-        name: normHeaders.indexOf("termo") !== -1 ? normHeaders.indexOf("termo") : getIdx(["nome", "descricao", "medicamento", "material"]),
-        presentation: getIdx(["apresentacao"]),
-        laboratory: getIdx(["laboratorio", "fabricante"]),
-        anvisa: getIdx(["registro anvisa", "anvisa", "registro"])
-      };
+      // Mapeamento Dinâmico por Categoria
+      const json = [];
+      const colMap: any = {};
 
-      // Monta o JSON a partir da linha de cabeçalho real
+      if (activeTab === "procedures" || activeTab === "medical_supplies") {
+        colMap.code = getIdx(["codigo", "tuss", "cod", "produto"]);
+        colMap.name = getIdx(["termo", "nome", "descricao", "procedimento"]);
+        colMap.presentation = getIdx(["apresentacao"]);
+        colMap.laboratory = getIdx(["laboratorio", "fabricante"]);
+        colMap.anvisa = getIdx(["anvisa", "registro"]);
+      } else if (activeTab === "inventory") {
+        colMap.name = getIdx(["nome", "item", "produto"]);
+        colMap.quantity = getIdx(["quantidade", "estoque", "atual", "qtd"]);
+        colMap.unit = getIdx(["unidade", "medida", "und"]);
+        colMap.category = getIdx(["categoria", "grupo"]);
+        colMap.unit_cost = getIdx(["custo", "preco", "valor"]);
+        colMap.expiry_date = getIdx(["validade", "vencimento"]);
+      } else if (activeTab === "patients") {
+        colMap.name = getIdx(["nome", "paciente", "cliente"]);
+        colMap.age = getIdx(["idade", "nascimento", "data"]);
+        colMap.gender = getIdx(["sexo", "genero"]);
+        colMap.phone = getIdx(["telefone", "celular", "contato", "mobile"]);
+        colMap.email = getIdx(["email", "e-mail", "correio"]);
+        colMap.address = getIdx(["endereco", "logradouro", "rua"]);
+      }
+
       for (let i = headerIndex + 1; i < rawData.length; i++) {
         const rowArray = rawData[i];
         if (!rowArray || rowArray.length === 0) continue;
         
-        const rowObj: any = {
-           _raw_code: colMap.code !== -1 ? rowArray[colMap.code] : undefined,
-           _raw_name: colMap.name !== -1 ? rowArray[colMap.name] : undefined,
-           _raw_presentation: colMap.presentation !== -1 ? rowArray[colMap.presentation] : undefined,
-           _raw_laboratory: colMap.laboratory !== -1 ? rowArray[colMap.laboratory] : undefined,
-           _raw_anvisa: colMap.anvisa !== -1 ? rowArray[colMap.anvisa] : undefined,
-        };
+        const rowObj: any = {};
+        Object.keys(colMap).forEach(key => {
+          const idx = colMap[key];
+          if (idx !== -1) rowObj[key] = rowArray[idx];
+        });
         
-        if (rowObj._raw_code || rowObj._raw_name) {
+        if (rowObj.name || rowObj.code) {
           json.push(rowObj);
         }
       }
 
       setParsedData(json);
       setStage("READY");
-      addLog(`Planilha auditada com sucesso! ${json.length} registros identificados.`);
-      addLog(`Mapeamento: Código=${colMap.code !== -1 ? headers[colMap.code] : "N/A"}, Nome=${colMap.name !== -1 ? headers[colMap.name] : "N/A"}`);
+      addLog(`✅ Planilha pronta: ${json.length} registros identificados.`);
     } catch (err: any) {
-      console.error(err);
-      addLog(`🚨 Erro ao ler a planilha: ${err.message}`);
+      addLog(`🚨 Erro: ${err.message}`);
       setStage("IDLE");
     }
   };
 
-  const cancelImport = () => {
-     if (stage === "IMPORTING") {
-       cancelRef.current = true;
-       addLog(`⚠️ Processo de cancelamento solicitado... Parando na próxima iteração.`);
-     } else {
-       setStage("IDLE");
-       setParsedData([]);
-       setFileName("");
-       if (fileInputRef.current) fileInputRef.current.value = "";
-       addLog(`Operação cancelada pelo usuário. Sistema limpo.`);
-     }
-  };
-
-  const clearLogs = () => {
-    setLogs([]);
-    setStats({ success: 0, errors: 0 });
-    addLog("Terminal limpo pelo usuário.");
-  };
-
-  const downloadLogs = () => {
-    const content = logs.join("\n");
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `loader-log-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   const processImport = async () => {
     if (parsedData.length === 0) return;
-
     setStage("IMPORTING");
     cancelRef.current = false;
     let successCount = 0;
     let errorCount = 0;
 
-    addLog(`🚀 INICIANDO INGESTÃO DE DADOS (${parsedData.length} registros no lote).`);
+    addLog(`🚀 Iniciando carga para ${activeTab}...`);
 
     for (let i = 0; i < parsedData.length; i++) {
       if (cancelRef.current) {
-         addLog(`🛑 Ingestão abortada! Parada de segurança acionada. Foram inseridos ${successCount} registros.`);
-         setStage("DONE");
-         return;
+         addLog(`🛑 Interrompido pelo usuário.`);
+         break;
       }
 
       const row = parsedData[i];
-      
-      const code = row._raw_code;
-      const name = row._raw_name;
-      const presentation = row._raw_presentation;
-      const laboratory = row._raw_laboratory;
-      const anvisa = row._raw_anvisa;
+      let table = "";
+      let insertData: any = { updated_at: new Date().toISOString() };
+      let onConflict = "id";
 
-      if (code && name && code.toString().trim() !== "" && name.toString().trim() !== "") {
-        const table = activeTab === "procedures" ? "procedures" : "medical_supplies";
-        const baseData = {
-          code: code.toString().trim(),
-          name: name.toString().trim(),
-          updated_at: new Date().toISOString(),
+      if (activeTab === "procedures") {
+        table = "procedures";
+        insertData = { ...insertData, code: row.code?.toString(), name: row.name?.toString(), category: "tuss" };
+        onConflict = "code";
+      } else if (activeTab === "medical_supplies") {
+        table = "medical_supplies";
+        insertData = { 
+          ...insertData, 
+          code: row.code?.toString(), 
+          name: row.name?.toString(),
+          presentation: row.presentation?.toString(),
+          laboratory: row.laboratory?.toString(),
+          anvisa_registry: row.anvisa?.toString(),
+          category: "medicamento"
         };
-
-        const insertData =
-          activeTab === "procedures"
-            ? { ...baseData, category: "tuss" }
-            : {
-                ...baseData,
-                presentation: presentation?.toString().trim() || "",
-                laboratory: laboratory?.toString().trim() || "",
-                anvisa_registry: anvisa?.toString().trim() || "",
-                category: "medicamento",
-              };
-
-        const { error } = await supabase.from(table).upsert(insertData, {
-          onConflict: "code",
-        });
-
-        if (!error) {
-          successCount++;
-        } else {
-          errorCount++;
-          addLog(`❌ Erro no código ${code}: ${error.message}`);
-        }
+        onConflict = "code";
+      } else if (activeTab === "inventory") {
+        table = "inventory_items";
+        insertData = { 
+          ...insertData, 
+          name: row.name?.toString(),
+          quantity: parseFloat(row.quantity) || 0,
+          unit: row.unit?.toString() || "Unidade",
+          category: row.category?.toString() || "Geral",
+          unit_cost: parseFloat(row.unit_cost) || 0,
+          expiry_date: row.expiry_date
+        };
+        onConflict = "name";
+      } else if (activeTab === "patients") {
+        table = "patients";
+        insertData = { 
+          ...insertData, 
+          name: row.name?.toString(),
+          age: parseInt(row.age) || null,
+          gender: row.gender?.toString(),
+          phone: row.phone?.toString(),
+          email: row.email?.toString(),
+          address: row.address?.toString()
+        };
+        onConflict = "name";
       }
-      
-      if (i > 0 && i % 50 === 0) {
-         setStats({ success: successCount, errors: errorCount });
+
+      const { error } = await supabase.from(table).upsert(insertData, { onConflict });
+
+      if (!error) {
+        successCount++;
+      } else {
+        errorCount++;
+        if (errorCount <= 5) addLog(`❌ Erro no registro ${i+1}: ${error.message}`);
+      }
+
+      if (i > 0 && i % 20 === 0) {
+        setStats({ success: successCount, errors: errorCount });
       }
     }
 
     setStats({ success: successCount, errors: errorCount });
-    addLog(`✅ Processo concluido! Lote inteiro enviado com ${successCount} acertos e ${errorCount} erros.`);
+    addLog(`🏁 Carga concluída: ${successCount} sucessos, ${errorCount} erros.`);
     setStage("DONE");
+    fetchDbStats();
+  };
+
+  const handleTruncate = async () => {
+    if (truncateConfirm !== "DELETAR") return;
+    
+    addLog(`⚠️ Iniciando limpeza da tabela ${activeTab}...`);
+    const tableMap: Record<Category, string> = {
+      procedures: "procedures",
+      medical_supplies: "medical_supplies",
+      inventory: "inventory_items",
+      patients: "patients"
+    };
+
+    const { error } = await supabase.from(tableMap[activeTab]).delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    
+    if (error) {
+      addLog(`🚨 Erro ao limpar: ${error.message}`);
+    } else {
+      addLog(`✨ Tabela ${activeTab} limpa com sucesso.`);
+      fetchDbStats();
+    }
+    setIsTruncateModalOpen(false);
+    setTruncateConfirm("");
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900 p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Cabeçalho */}
-        <header className="flex items-center gap-4 border-b border-neutral-200 pb-6">
-          <div className="h-14 w-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
-            <DatabaseZap size={32} />
-          </div>
-          <div>
-            <h1 className="text-3xl font-black text-indigo-900">Data Loader</h1>
-            <p className="text-neutral-500 font-medium">Motor independente de Ingestão de Dados - Axis GC</p>
-          </div>
-        </header>
-
-        {/* Console de Upload */}
-        <main className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          
-          <section className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm">
-              <h2 className="text-xl font-bold mb-4">Configuração da Carga</h2>
-              
-              <div className="flex bg-neutral-100 p-1 rounded-xl mb-6">
-                <button
-                  disabled={stage === "IMPORTING"}
-                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-                    activeTab === "procedures" ? "bg-white shadow text-indigo-700" : "text-neutral-500 hover:text-neutral-800"
-                  } disabled:opacity-50`}
-                  onClick={() => setActiveTab("procedures")}
-                >
-                  <FileSpreadsheet size={16} /> Procedimentos (TUSS)
-                </button>
-                <button
-                  disabled={stage === "IMPORTING"}
-                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-                    activeTab === "medical_supplies" ? "bg-white shadow text-indigo-700" : "text-neutral-500 hover:text-neutral-800"
-                  } disabled:opacity-50`}
-                  onClick={() => setActiveTab("medical_supplies")}
-                >
-                  <Package size={16} /> Medicamentos e Materiais
-                </button>
-              </div>
-
-              <div className="border-2 border-dashed border-indigo-200 bg-indigo-50/50 rounded-2xl p-6 text-center flex flex-col items-center justify-center gap-4 transition-all">
-                 {stage === "IDLE" && (
-                    <>
-                       <div className="bg-indigo-100 p-4 rounded-full text-indigo-600">
-                          <Upload size={32} />
-                       </div>
-                       <div>
-                          <h3 className="font-bold text-lg text-indigo-900">Selecione uma Planilha</h3>
-                          <p className="text-sm text-indigo-700/80 mt-1">Formato suportado: .xlsx, .xls, .csv</p>
-                       </div>
-                       <input 
-                         type="file" 
-                         ref={fileInputRef} 
-                         onChange={handleFileSelection} 
-                         accept=".xlsx, .xls, .csv" 
-                         className="hidden" 
-                       />
-                       <button 
-                          onClick={() => fileInputRef.current?.click()}
-                          className="mt-2 w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
-                       >
-                          Procurar no computador
-                       </button>
-                    </>
-                 )}
-
-                 {stage === "READY" && (
-                    <div className="w-full text-left space-y-4">
-                       <div className="flex items-center gap-3">
-                         <CheckCircle className="text-green-500" size={24}/>
-                         <div>
-                            <p className="text-sm font-bold text-indigo-900 line-clamp-1">{fileName}</p>
-                            <p className="text-xs text-indigo-700 font-mono">{parsedData.length} registros analisados</p>
-                         </div>
-                       </div>
-                       <div className="flex gap-2">
-                          <button onClick={processImport} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2">
-                             <Play fill="currentColor" size={18} /> Iniciar
-                          </button>
-                          <button onClick={cancelImport} className="py-3 px-4 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl transition-all flex items-center justify-center gap-2">
-                             Cancelar
-                          </button>
-                       </div>
-                    </div>
-                 )}
-
-                 {stage === "IMPORTING" && (
-                    <div className="w-full py-2 space-y-4">
-                       <div className="flex flex-col items-center gap-2">
-                          <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-                          <p className="font-bold text-indigo-900 text-sm">Enviando dados pro banco...</p>
-                       </div>
-                       <button onClick={cancelImport} className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2">
-                          <XSquare size={18} /> Forçar Parada
-                       </button>
-                    </div>
-                 )}
-
-                 {stage === "DONE" && (
-                    <div className="w-full space-y-4 text-center">
-                       <CheckCircle className="text-green-500 mx-auto" size={48}/>
-                       <h3 className="font-bold text-xl text-indigo-900">Carga Finalizada</h3>
-                       <button onClick={cancelImport} className="mt-2 w-full py-3 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-bold rounded-xl transition-all flex items-center justify-center gap-2">
-                          Nova Importação
-                       </button>
-                    </div>
-                 )}
-              </div>
+    <div className="min-h-screen bg-[#0a0a0c] text-neutral-100 p-6 font-sans selection:bg-indigo-500/30">
+      <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-3rem)]">
+        
+        {/* Coluna 1: Stats & Categorias (Sidebar) */}
+        <aside className="lg:col-span-3 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar">
+          <header className="flex items-center gap-4 mb-2">
+            <div className="h-12 w-12 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(79,70,229,0.4)]">
+              <DatabaseZap size={28} className="text-white" />
             </div>
+            <div>
+              <h1 className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-neutral-500">
+                DATA LOADER <span className="text-xs text-indigo-500 ml-1">v2.0</span>
+              </h1>
+              <p className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">Enterprise Ingestion Suite</p>
+            </div>
+          </header>
+
+          <nav className="space-y-2">
+            {(["procedures", "medical_supplies", "inventory", "patients"] as Category[]).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => {
+                  if (stage !== "IMPORTING") {
+                    setActiveTab(cat);
+                    setStage("IDLE");
+                    setParsedData([]);
+                  }
+                }}
+                className={`w-full group relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${
+                  activeTab === cat 
+                    ? "bg-indigo-600/10 border-indigo-500/50 shadow-[0_0_15px_rgba(79,70,229,0.1)]" 
+                    : "bg-neutral-900/50 border-neutral-800/50 hover:bg-neutral-800/50"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${activeTab === cat ? "bg-indigo-600 text-white" : "bg-neutral-800 text-neutral-400"}`}>
+                    {cat === "procedures" && <FileSpreadsheet size={18} />}
+                    {cat === "medical_supplies" && <Package size={18} />}
+                    {cat === "inventory" && <BarChart3 size={18} />}
+                    {cat === "patients" && <Users size={18} />}
+                  </div>
+                  <div className="text-left">
+                    <span className={`block text-xs font-bold ${activeTab === cat ? "text-indigo-400" : "text-neutral-400"}`}>
+                      {cat === "procedures" && "Faturamento / TUSS"}
+                      {cat === "medical_supplies" && "Faturamento / MAT"}
+                      {cat === "inventory" && "Gerência de Estoque"}
+                      {cat === "patients" && "Módulo de Pacientes"}
+                    </span>
+                    <span className="text-sm font-bold text-white uppercase tracking-tight">
+                      {cat === "procedures" && "Procedimentos"}
+                      {cat === "medical_supplies" && "Materiais"}
+                      {cat === "inventory" && "Inventário"}
+                      {cat === "patients" && "Pacientes"}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-mono text-neutral-500 block">Total</span>
+                  <span className={`text-sm font-black ${activeTab === cat ? "text-indigo-400" : "text-neutral-300"}`}>
+                    {dbStats[cat].toLocaleString()}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </nav>
+
+          <div className="mt-auto p-4 bg-red-950/20 border border-red-900/30 rounded-2xl">
+            <h4 className="text-xs font-black text-red-400 flex items-center gap-2 mb-3">
+              <AlertTriangle size={14} /> ÁREA DE MANUTENÇÃO
+            </h4>
+            <button 
+              onClick={() => setIsTruncateModalOpen(true)}
+              className="w-full py-2 flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/50 rounded-xl text-xs font-bold transition-all"
+            >
+              <Trash2 size={14} /> Limpar Tabela Atual
+            </button>
+          </div>
+        </aside>
+
+        {/* Coluna 2: Upload & Preview (Main) */}
+        <main className="lg:col-span-6 flex flex-col gap-6 overflow-hidden">
+          <section className="bg-neutral-900/40 border border-neutral-800/60 rounded-[32px] p-8 backdrop-blur-xl relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/5 to-transparent opacity-50 pointer-events-none" />
             
-            {/* Informações de Conexão */}
-            <div className="bg-neutral-800 text-neutral-300 p-6 rounded-3xl text-sm border-4 border-neutral-900 shadow-xl">
-               <h3 className="text-white font-bold mb-2 flex items-center gap-2">🔌 Status da Conexão</h3>
-               <p>Conectado ao Supabase: <strong className="text-emerald-400">Online</strong></p>
-               <p className="mt-2 text-xs text-neutral-400 border-t border-neutral-700 pt-2">Operador de carga: Axis GC DataLoader V1.0</p>
-            </div>
+            {stage === "IDLE" && (
+              <div 
+                className="flex flex-col items-center justify-center min-h-[300px] border-4 border-dashed border-neutral-800 hover:border-indigo-500/30 hover:bg-indigo-500/5 rounded-[28px] transition-all cursor-pointer group/upload"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div className="h-20 w-20 bg-neutral-800 group-hover/upload:bg-indigo-600 group-hover/upload:rotate-12 rounded-3xl flex items-center justify-center text-neutral-500 group-hover/upload:text-white transition-all shadow-xl">
+                  <Upload size={40} />
+                </div>
+                <h3 className="mt-6 text-xl font-black">SOLTE SUA PLANILHA</h3>
+                <p className="text-neutral-500 text-sm mt-1">UTF-8 .CSV ou Excel (.XLSX)</p>
+                <input type="file" ref={fileInputRef} onChange={handleFileSelection} className="hidden" accept=".xlsx, .xls, .csv" />
+              </div>
+            )}
+
+            {(stage === "READY" || stage === "IMPORTING" || stage === "DONE") && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 bg-emerald-500/20 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/30">
+                      <FileSpreadsheet size={32} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg line-clamp-1">{fileName}</h3>
+                      <p className="text-xs font-mono text-emerald-400">{parsedData.length} registros mapeados</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {stage === "READY" && (
+                      <button onClick={processImport} className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2">
+                        <Play size={18} fill="currentColor" /> INICIAR CARGA
+                      </button>
+                    )}
+                    {(stage === "READY" || stage === "DONE") && (
+                      <button onClick={() => setStage("IDLE")} className="p-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl transition-all">
+                        <RefreshCw size={18} />
+                      </button>
+                    )}
+                    {stage === "IMPORTING" && (
+                      <button onClick={() => cancelRef.current = true} className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-black rounded-xl transition-all flex items-center gap-2">
+                        <XSquare size={18} /> PARAR
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute left-0 top-0 h-full w-1 bg-neutral-800 rounded-full overflow-hidden">
+                    <div 
+                      className="w-full bg-indigo-500 transition-all duration-500" 
+                      style={{ height: `${( (stats.success + stats.errors) / parsedData.length) * 100}%` }}
+                    />
+                  </div>
+                  <div className="pl-6">
+                    <h4 className="text-[10px] font-black uppercase tracking-tighter text-neutral-500 mb-3 flex items-center gap-2">
+                      <ChevronRight size={10} /> PRÉ-VISUALIZAÇÃO DOS DADOS
+                    </h4>
+                    <div className="bg-black/50 border border-neutral-800 rounded-2xl overflow-hidden overflow-x-auto">
+                      <table className="w-full text-[10px] font-mono">
+                        <thead>
+                          <tr className="bg-neutral-800 text-neutral-400">
+                            {previewHeaders.slice(0, 5).map((h, i) => (
+                              <th key={i} className="p-3 text-left border-r border-neutral-900">{h || "N/A"}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedData.slice(0, 5).map((row, ridx) => (
+                            <tr key={ridx} className="border-b border-neutral-900 text-neutral-300">
+                              {Object.values(row).slice(0, 5).map((val: any, vidx) => (
+                                <td key={vidx} className="p-3 border-r border-neutral-900 truncate max-w-[120px]">
+                                  {val?.toString() || ""}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
-          <section>
-             <div className="bg-black text-emerald-400 font-mono text-xs p-6 rounded-3xl h-[500px] flex flex-col shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full px-6 py-3 bg-neutral-900 border-b border-neutral-800 flex justify-between items-center text-neutral-400 font-sans font-bold z-10">
-                   <div className="flex items-center gap-3">
-                      <span>Terminal de Execução</span>
-                      <button 
-                        onClick={clearLogs}
-                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-[10px] rounded border border-neutral-700 transition-colors"
-                      >
-                        Limpar
-                      </button>
-                      <button 
-                        onClick={downloadLogs}
-                        className="px-2 py-0.5 bg-indigo-900/50 hover:bg-indigo-900 text-indigo-300 text-[10px] rounded border border-indigo-800 transition-colors"
-                      >
-                        Baixar LOG (.txt)
-                      </button>
-                   </div>
-                   <div className="flex gap-4">
-                      <span>🟩 {stats.success}</span>
-                      <span className="text-red-400">🟥 {stats.errors}</span>
-                   </div>
+          <footer className="mt-auto grid grid-cols-2 gap-4">
+             <div className="bg-neutral-900/30 p-4 border border-neutral-800/60 rounded-[24px] flex items-center gap-4">
+                <div className="h-10 w-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center">
+                  <CheckCircle size={20} />
                 </div>
-                
-                <div className="flex-1 overflow-y-auto mt-10 space-y-1 pr-2 custom-scrollbar">
-                   {logs.length === 0 ? (
-                      <div className="text-neutral-600 italic">Aguardando iniciar carga de dados...</div>
-                   ) : (
-                      logs.map((log, index) => (
-                         <div key={index}>{log}</div>
-                      ))
-                   )}
+                <div>
+                   <span className="text-[10px] font-black uppercase text-neutral-500 block">Processados</span>
+                   <span className="text-lg font-black text-white">{stats.success}</span>
                 </div>
              </div>
-          </section>
-
+             <div className="bg-neutral-900/30 p-4 border border-neutral-800/60 rounded-[24px] flex items-center gap-4">
+                <div className="h-10 w-10 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center">
+                  <XSquare size={20} />
+                </div>
+                <div>
+                   <span className="text-[10px] font-black uppercase text-neutral-500 block">Erros</span>
+                   <span className="text-lg font-black text-white">{stats.errors}</span>
+                </div>
+             </div>
+          </footer>
         </main>
+
+        {/* Coluna 3: Console (Right) */}
+        <section className="lg:col-span-3 flex flex-col bg-black border border-neutral-800/60 rounded-[32px] overflow-hidden shadow-2xl">
+          <div className="bg-neutral-900/80 p-5 flex items-center justify-between border-b border-neutral-800">
+             <div className="flex items-center gap-3">
+               <TerminalIcon size={18} className="text-indigo-400" />
+               <span className="text-xs font-black uppercase tracking-widest text-white">System Logs</span>
+             </div>
+             <div className="flex gap-2">
+                <button onClick={() => setLogs([])} className="p-2 hover:bg-neutral-800 text-neutral-500 rounded-lg transition-all" title="Limpar">
+                  <Trash2 size={14} />
+                </button>
+             </div>
+          </div>
+          <div className="flex-1 p-5 font-mono text-[10px] text-emerald-500/80 overflow-y-auto leading-relaxed custom-scrollbar bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/5 to-transparent">
+             {logs.length === 0 ? (
+               <div className="opacity-20 flex flex-col items-center justify-center h-full gap-4 grayscale">
+                  <TerminalIcon size={40} />
+                  <p className="text-center font-sans uppercase tracking-[.2em] font-black">Awaiting Ingestion...</p>
+               </div>
+             ) : (
+               logs.map((log, i) => (
+                 <div key={i} className="mb-2 flex gap-3 group">
+                   <span className="text-neutral-700 shrink-0">[{i}]</span>
+                   <span className="group-hover:text-emerald-400 transition-colors">{log}</span>
+                 </div>
+               ))
+             )}
+          </div>
+          <div className="p-4 bg-neutral-900/50 border-t border-neutral-800 flex items-center justify-between">
+             <div className="flex items-center gap-2">
+                <div className="h-2 w-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                <span className="text-[10px] font-bold text-neutral-400 uppercase">Supabase Engine: Ga</span>
+             </div>
+             <span className="text-[10px] font-mono text-neutral-600">v1.2-neo</span>
+          </div>
+        </section>
+
       </div>
+
+      {/* MODAL TRUNCATE */}
+      {isTruncateModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-6">
+           <div className="bg-[#121214] border border-red-900/40 p-10 rounded-[40px] max-w-md w-full shadow-[0_0_50px_rgba(239,68,68,0.15)] animate-in zoom-in-95 duration-200">
+              <div className="h-20 w-20 bg-red-600/10 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                <AlertTriangle size={48} />
+              </div>
+              <h2 className="text-2xl font-black text-center text-white mb-2">OPERÇÃO DE RISCO</h2>
+              <p className="text-neutral-400 text-center text-sm mb-8">
+                Você está prestes a apagar TODOS os registros da tabela <strong className="text-white uppercase">{activeTab}</strong>. Isso não pode ser desfeito.
+              </p>
+              
+              <div className="space-y-4">
+                 <p className="text-[10px] font-black text-neutral-500 uppercase text-center tracking-widest">Digite <span className="text-red-500">DELETAR</span> para confirmar</p>
+                 <input 
+                   type="text" 
+                   value={truncateConfirm}
+                   onChange={e => setTruncateConfirm(e.target.value)}
+                   className="w-full bg-black border border-neutral-800 rounded-2xl py-4 px-6 text-center text-xl font-black text-red-500 focus:border-red-600 outline-none transition-all placeholder:text-neutral-800"
+                   placeholder="..."
+                 />
+                 <div className="flex gap-4 pt-4">
+                    <button 
+                      onClick={handleTruncate}
+                      disabled={truncateConfirm !== "DELETAR"}
+                      className="flex-1 py-4 bg-red-600 disabled:opacity-30 disabled:grayscale hover:bg-red-500 text-white font-black rounded-2xl transition-all shadow-xl shadow-red-600/20"
+                    >
+                      APAGAR TUDO
+                    </button>
+                    <button 
+                      onClick={() => setIsTruncateModalOpen(false)}
+                      className="flex-1 py-4 bg-neutral-800 hover:bg-neutral-700 text-white font-black rounded-2xl transition-all"
+                    >
+                      CANCELAR
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #444; }
+      `}</style>
     </div>
   );
 }
