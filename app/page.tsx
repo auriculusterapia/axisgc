@@ -93,6 +93,7 @@ export default function Home() {
   const [insurers, setInsurers] = useState<any[]>([]);
   const [insurancePlans, setInsurancePlans] = useState<any[]>([]);
   const [insurancePrices, setInsurancePrices] = useState<any[]>([]);
+  const [medicalSupplies, setMedicalSupplies] = useState<any[]>([]);
   const [procedures, setProcedures] = useState<any[]>([]);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [isConsultationModalOpen, setIsConsultationModalOpen] = useState(false);
@@ -233,7 +234,8 @@ export default function Home() {
         { data: insurersData },
         { data: insurancePlansData },
         { data: insurancePricesData },
-        { data: proceduresData }
+        { data: proceduresData },
+        { data: medicalSuppliesData }
       ] = await Promise.all([
         (supabase as any).from('patients').select('*, patient_packages(status), insurance:patient_insurances(*)').order('name'),
         (supabase as any).from('appointments').select('*').order('date', { ascending: false }),
@@ -248,7 +250,8 @@ export default function Home() {
         (supabase as any).from('insurers').select('*').order('name'),
         (supabase as any).from('insurance_plans').select('*').order('name'),
         (supabase as any).from('insurance_prices').select('*, procedure:procedures(*), plan:insurance_plans(*)'),
-        (supabase as any).from('procedures').select('*').order('code')
+        (supabase as any).from('procedures').select('*').order('code'),
+        (supabase as any).from('medical_supplies').select('*').order('name')
       ]);
 
       if (patientsData) {
@@ -336,6 +339,7 @@ export default function Home() {
       if (insurancePlansData) setInsurancePlans(insurancePlansData as any[]);
       if (insurancePricesData) setInsurancePrices(insurancePricesData as any[]);
       if (proceduresData) setProcedures(proceduresData as any[]);
+      if (medicalSuppliesData) setMedicalSupplies(medicalSuppliesData as any[]);
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -1472,7 +1476,7 @@ export default function Home() {
           />
         );
       case 'billing':
-        return <BillingView patients={patients} user={user} onRefresh={fetchData} billingItems={billingItems} batches={billingBatches} insurers={insurers} plans={insurancePlans} prices={insurancePrices} procedures={procedures} loading={isDataLoading} />;
+        return <BillingView patients={patients} user={user} onRefresh={fetchData} billingItems={billingItems} batches={billingBatches} insurers={insurers} plans={insurancePlans} prices={insurancePrices} procedures={procedures} medicalSupplies={medicalSupplies} loading={isDataLoading} />;
       default:
         return (
           <div className="flex items-center justify-center h-full">

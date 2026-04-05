@@ -61,6 +61,7 @@ export default function BillingView({
   const [activeTab, setActiveTab] = useState<'pendencies' | 'batches' | 'analytics' | 'insurers' | 'prices'>('pendencies');
   const [activePricesTab, setActivePricesTab] = useState<'procedures' | 'medicalSupplies'>('procedures');
   const [searchTerm, setSearchTerm] = useState('');
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -97,6 +98,17 @@ export default function BillingView({
     guia_number: '', 
     auth_number: '' 
   });
+
+  // Derived filtered lists for the search
+  const filteredProcedures = (procedures || []).filter(p => 
+    (p.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+     p.code?.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const filteredMedicalSupplies = (medicalSupplies || []).filter(m => 
+    (m.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+     m.code?.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   const handleSaveInsurer = async () => {
     if (!supabase || !user) return;
@@ -1012,13 +1024,31 @@ export default function BillingView({
                     </button>
                   </div>
                   
-                  <div className="flex items-center gap-3 px-2">
-                    {/* Botões de filtro futuramente podem entrar aqui */}
+                  <div className="flex-1 flex items-center gap-3 px-4 py-2 bg-surface-container-low rounded-xl border border-outline-variant/10 focus-within:border-primary/30 transition-all max-w-md">
+                    <Search size={16} className="text-on-surface-variant/40" />
+                    <input 
+                      type="text" 
+                      placeholder="Buscar por nome ou código..."
+                      spellCheck={false}
+                      className="bg-transparent border-none outline-none text-sm w-full text-on-surface placeholder:text-on-surface-variant/40 font-bold"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {searchTerm && (
+                      <button onClick={() => setSearchTerm('')} className="p-1 hover:bg-surface-container rounded-full"><X size={12} /></button>
+                    )}
                   </div>
                 </div>
 
                 {activePricesTab === 'procedures' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="flex flex-col gap-4">
+                    {procedures.length > 0 && (
+                      <div className="text-xs font-bold text-on-surface-variant flex items-center gap-2 px-2">
+                        <Clock size={14} />
+                        Última Carga: {new Date(procedures[0]?.updated_at || new Date()).toLocaleString('pt-BR')}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {(prices.length === 0 && procedures.length === 0) ? (
                       <div className="col-span-full flex flex-col items-center justify-center p-20 text-center bg-white border border-outline-variant/20 rounded-3xl">
                         <div className="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-on-surface-variant/30 mb-4">
@@ -1031,7 +1061,7 @@ export default function BillingView({
                       </div>
                     ) : (
                       <>
-                        {procedures.slice(0, 50).map((proc: Procedure) => (
+                        {filteredProcedures.slice(0, itemsPerPage).map((proc: Procedure) => (
                           <div key={proc.id} className="bg-white p-6 rounded-3xl border border-outline-variant/20 shadow-sm hover:shadow-xl transition-all">
                             <div className="flex justify-between items-start mb-4">
                               <span className="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-bold uppercase">{proc.category || 'TUSS'}</span>
@@ -1041,15 +1071,41 @@ export default function BillingView({
                             <p className="text-xs font-mono text-primary font-bold mt-1">Código: {proc.code}</p>
                           </div>
                         ))}
-                        {procedures.length > 50 && (
-                          <div className="col-span-full py-4 text-center mt-4">
+                        {filteredProcedures.length > 25 && (
+                          <div className="col-span-full py-8 flex flex-col items-center gap-4">
                             <span className="text-sm font-bold text-on-surface-variant">
-                              Mostrando 50 de {procedures.length} procedimentos carregados... (Use a busca para filtrar)
+                              Mostrando {Math.min(itemsPerPage, filteredProcedures.length)} de {filteredProcedures.length} procedimentos...
                             </span>
+                            
+                            <div className="flex bg-surface-container-low p-1 rounded-xl items-center gap-1 border border-outline-variant/10">
+                              <span className="text-[10px] font-black uppercase text-on-surface-variant px-2">Ver mais:</span>
+                              {[25, 50, 100].map(val => (
+                                <button 
+                                  key={val}
+                                  onClick={() => setItemsPerPage(val)}
+                                  className={cn(
+                                    "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                    itemsPerPage === val ? "bg-white text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+                                  )}
+                                >
+                                  {val}
+                                </button>
+                              ))}
+                              <button 
+                                onClick={() => setItemsPerPage(9999)}
+                                className={cn(
+                                  "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                  itemsPerPage === 9999 ? "bg-white text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+                                )}
+                              >
+                                Tudo
+                              </button>
+                            </div>
                           </div>
                         )}
                       </>
                     )}
+                    </div>
                   </div>
                 )}
 
@@ -1082,7 +1138,7 @@ export default function BillingView({
                                </tr>
                              ) : (
                                <>
-                                 {medicalSupplies.slice(0, 50).map(supply => (
+                                 {filteredMedicalSupplies.slice(0, itemsPerPage).map((supply: MedicalSupply) => (
                                    <tr key={supply.id} className="hover:bg-surface-container-lowest transition-colors">
                                      <td className="px-5 py-3 font-mono text-xs font-bold text-primary">{supply.code}</td>
                                      <td className="px-5 py-3 text-sm font-bold text-on-surface">
@@ -1093,10 +1149,39 @@ export default function BillingView({
                                      <td className="px-5 py-3 text-xs text-on-surface-variant font-mono">{supply.anvisa_registry || '---'}</td>
                                    </tr>
                                  ))}
-                                 {medicalSupplies.length > 50 && (
+                                 {filteredMedicalSupplies.length > 25 && (
                                    <tr>
-                                     <td colSpan={4} className="px-5 py-4 text-center font-bold text-sm text-on-surface-variant">
-                                        Mostrando 50 de {medicalSupplies.length} registros...
+                                     <td colSpan={4} className="px-5 py-8">
+                                       <div className="flex flex-col items-center gap-4">
+                                          <span className="text-sm font-bold text-on-surface-variant">
+                                            Mostrando {Math.min(itemsPerPage, filteredMedicalSupplies.length)} de {filteredMedicalSupplies.length} registros...
+                                          </span>
+                                          
+                                          <div className="flex bg-surface-container-low p-1 rounded-xl items-center gap-1 border border-outline-variant/10">
+                                            <span className="text-[10px] font-black uppercase text-on-surface-variant px-2">Ver mais:</span>
+                                            {[25, 50, 100].map(val => (
+                                              <button 
+                                                key={val}
+                                                onClick={() => setItemsPerPage(val)}
+                                                className={cn(
+                                                  "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                                  itemsPerPage === val ? "bg-white text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+                                                )}
+                                              >
+                                                {val}
+                                              </button>
+                                            ))}
+                                            <button 
+                                              onClick={() => setItemsPerPage(9999)}
+                                              className={cn(
+                                                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                                itemsPerPage === 9999 ? "bg-white text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+                                              )}
+                                            >
+                                              Tudo
+                                            </button>
+                                          </div>
+                                       </div>
                                      </td>
                                    </tr>
                                  )}

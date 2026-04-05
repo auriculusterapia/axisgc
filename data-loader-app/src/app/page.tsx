@@ -35,11 +35,96 @@ export default function Home() {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<any>(worksheet);
+      
+      const rawData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, blankrows: false });
+      
+      // Palavras-chave para identificar o cabeçalho real
+      const headerKeywords = ["codigo", "termo", "anvisa", "laboratorio", "produto", "nome", "descricao", "registro"];
+      let headerIndex = -1;
+      let maxScore = 0;
+
+      // Analisa as primeiras 30 linhas buscando a que mais se parece com um cabeçalho TUSS
+      for (let i = 0; i < Math.min(rawData.length, 30); i++) {
+        const rowArray = rawData[i] || [];
+        let rowScore = 0;
+        
+        rowArray.forEach(cell => {
+          if (cell) {
+            const norm = cell.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+            if (headerKeywords.some(kw => norm.includes(kw))) rowScore++;
+          }
+        });
+
+        if (rowScore > maxScore) {
+          maxScore = rowScore;
+          headerIndex = i;
+        }
+      }
+
+      // Fallback caso a pontuação seja muito baixa
+      if (headerIndex === -1 || maxScore < 2) {
+        for (let i = 0; i < Math.min(rawData.length, 30); i++) {
+          const rowArray = rawData[i] || [];
+          const filled = rowArray.filter(c => c !== null && c !== undefined && c.toString().trim() !== "");
+          if (filled.length >= 3) {
+            headerIndex = i;
+            break;
+          }
+        }
+      }
+
+      const headers = rawData[headerIndex] || [];
+      const json = [];
+      
+      // Limpa e normaliza os cabeçalhos para o mapeamento
+      const normHeaders = headers.map(h => 
+        h ? h.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() : ""
+      );
+
+      // Função auxiliar para encontrar índice de coluna com prioridade de exatidão
+      const getIdx = (keywords: string[]) => {
+        // 1. Tenta correspondência exata primeiro
+        const exact = normHeaders.findIndex(h => keywords.includes(h));
+        if (exact !== -1) return exact;
+        // 2. Tenta correspondência parcial (começa com)
+        const starts = normHeaders.findIndex(h => keywords.some(kw => h.startsWith(kw)));
+        if (starts !== -1) return starts;
+        // 3. Tenta inclusão genérica
+        return normHeaders.findIndex(h => keywords.some(kw => h.includes(kw)));
+      };
+
+      // Mapeia os índices uma única vez
+      const colMap = {
+        code: getIdx(["codigo do termo", "codigo", "cod", "tuss", "produto"]),
+        // Para "name", evitamos que "termo" pegue "codigo do termo" priorizando exatidão
+        name: normHeaders.indexOf("termo") !== -1 ? normHeaders.indexOf("termo") : getIdx(["nome", "descricao", "medicamento", "material"]),
+        presentation: getIdx(["apresentacao"]),
+        laboratory: getIdx(["laboratorio", "fabricante"]),
+        anvisa: getIdx(["registro anvisa", "anvisa", "registro"])
+      };
+
+      // Monta o JSON a partir da linha de cabeçalho real
+      for (let i = headerIndex + 1; i < rawData.length; i++) {
+        const rowArray = rawData[i];
+        if (!rowArray || rowArray.length === 0) continue;
+        
+        const rowObj: any = {
+           _raw_code: colMap.code !== -1 ? rowArray[colMap.code] : undefined,
+           _raw_name: colMap.name !== -1 ? rowArray[colMap.name] : undefined,
+           _raw_presentation: colMap.presentation !== -1 ? rowArray[colMap.presentation] : undefined,
+           _raw_laboratory: colMap.laboratory !== -1 ? rowArray[colMap.laboratory] : undefined,
+           _raw_anvisa: colMap.anvisa !== -1 ? rowArray[colMap.anvisa] : undefined,
+        };
+        
+        if (rowObj._raw_code || rowObj._raw_name) {
+          json.push(rowObj);
+        }
+      }
 
       setParsedData(json);
       setStage("READY");
-      addLog(`Planilha auditada com sucesso! ${json.length} registros prontos para carga no banco de dados. Clique em Iniciar.`);
+      addLog(`Planilha auditada com sucesso! ${json.length} registros identificados.`);
+      addLog(`Mapeamento: Código=${colMap.code !== -1 ? headers[colMap.code] : "N/A"}, Nome=${colMap.name !== -1 ? headers[colMap.name] : "N/A"}`);
     } catch (err: any) {
       console.error(err);
       addLog(`🚨 Erro ao ler a planilha: ${err.message}`);
@@ -60,6 +145,25 @@ export default function Home() {
      }
   };
 
+  const clearLogs = () => {
+    setLogs([]);
+    setStats({ success: 0, errors: 0 });
+    addLog("Terminal limpo pelo usuário.");
+  };
+
+  const downloadLogs = () => {
+    const content = logs.join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `loader-log-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const processImport = async () => {
     if (parsedData.length === 0) return;
 
@@ -78,20 +182,12 @@ export default function Home() {
       }
 
       const row = parsedData[i];
-      const keys = Object.keys(row);
-      const normalize = (str: string) =>
-        str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-
-      const findVal = (keywords: string[]) => {
-        const matchedKey = keys.find((k) => keywords.some((kw) => normalize(k).includes(kw)));
-        return matchedKey ? row[matchedKey] : undefined;
-      };
-
-      const code = findVal(["codigo do termo", "codigo", "cod"]);
-      const name = findVal(["termo", "nome", "descricao"]);
-      const presentation = findVal(["apresentacao"]);
-      const laboratory = findVal(["laboratorio"]);
-      const anvisa = findVal(["anvisa", "registro"]);
+      
+      const code = row._raw_code;
+      const name = row._raw_name;
+      const presentation = row._raw_presentation;
+      const laboratory = row._raw_laboratory;
+      const anvisa = row._raw_anvisa;
 
       if (code && name && code.toString().trim() !== "" && name.toString().trim() !== "") {
         const table = activeTab === "procedures" ? "procedures" : "medical_supplies";
@@ -256,8 +352,22 @@ export default function Home() {
 
           <section>
              <div className="bg-black text-emerald-400 font-mono text-xs p-6 rounded-3xl h-[500px] flex flex-col shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full px-6 py-3 bg-neutral-900 border-b border-neutral-800 flex justify-between items-center text-neutral-400 font-sans font-bold">
-                   <span>Terminal de Execução</span>
+                <div className="absolute top-0 left-0 w-full px-6 py-3 bg-neutral-900 border-b border-neutral-800 flex justify-between items-center text-neutral-400 font-sans font-bold z-10">
+                   <div className="flex items-center gap-3">
+                      <span>Terminal de Execução</span>
+                      <button 
+                        onClick={clearLogs}
+                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-[10px] rounded border border-neutral-700 transition-colors"
+                      >
+                        Limpar
+                      </button>
+                      <button 
+                        onClick={downloadLogs}
+                        className="px-2 py-0.5 bg-indigo-900/50 hover:bg-indigo-900 text-indigo-300 text-[10px] rounded border border-indigo-800 transition-colors"
+                      >
+                        Baixar LOG (.txt)
+                      </button>
+                   </div>
                    <div className="flex gap-4">
                       <span>🟩 {stats.success}</span>
                       <span className="text-red-400">🟥 {stats.errors}</span>
