@@ -21,6 +21,7 @@ interface Patient {
   status: 'Ativo' | 'Inativo';
   lastVisit: string;
   avatar: string;
+  cpf?: string;
   // Insurance data
   // Insurance data
   insurerId?: string;
@@ -55,6 +56,7 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
     profession: '',
     status: 'Ativo' as 'Ativo' | 'Inativo',
     avatar: '',
+    cpf: '',
     // Insurance
     // Insurance
     insurerId: '',
@@ -88,6 +90,7 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
         profession: editingPatient?.profession || '',
         status: editingPatient?.status || 'Ativo' as 'Ativo' | 'Inativo',
         avatar: editingPatient?.avatar || '',
+        cpf: editingPatient?.cpf || '',
         insurerId: editingPatient?.insurerId || '',
         insurancePlanName: editingPatient?.insurancePlanName || '',
         insuranceSubplan: editingPatient?.insuranceSubplan || '',
@@ -172,6 +175,7 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
 
       await onSave({
         ...formData,
+        cpf: formData.cpf.replace(/\D/g, ''), // Salva limpo no banco
         insurancePlanId: finalPlanId,
         age: age,
       });
@@ -232,6 +236,24 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
                     onChange={e => setFormData({...formData, name: e.target.value})}
                     className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
                     placeholder="Ex: Maria Silva"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-outline uppercase tracking-widest">CPF</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={formData.cpf}
+                    onChange={e => {
+                      let val = e.target.value.replace(/\D/g, '');
+                      if (val.length > 11) val = val.slice(0, 11);
+                      if (val.length > 9) val = val.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+                      else if (val.length > 6) val = val.replace(/(\d{3})(\d{3})(\d{3})/, "$1.$2.$3");
+                      else if (val.length > 3) val = val.replace(/(\d{3})(\d{3})/, "$1.$2");
+                      setFormData({...formData, cpf: val});
+                    }}
+                    className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                    placeholder="000.000.000-00"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">

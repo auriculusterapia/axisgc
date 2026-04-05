@@ -63,6 +63,7 @@ export default function PatientsPage() {
     try {
       const patientData = {
         name: data.name,
+        cpf: data.cpf,
         age: parseInt(data.age) || 0,
         gender: data.gender,
         phone: data.phone,

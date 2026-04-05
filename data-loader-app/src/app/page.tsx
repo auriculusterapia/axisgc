@@ -154,6 +154,7 @@ export default function Home() {
         colMap.expiry_date = getIdx(["validade", "vencimento"]);
       } else if (activeTab === "patients") {
         colMap.name = getIdx(["nome", "paciente", "cliente"]);
+        colMap.cpf = getIdx(["cpf", "documento", "identificacao", "id"]);
         colMap.age = getIdx(["idade", "nascimento", "data"]);
         colMap.gender = getIdx(["sexo", "genero"]);
         colMap.phone = getIdx(["telefone", "celular", "contato", "mobile"]);
@@ -238,13 +239,14 @@ export default function Home() {
         insertData = { 
           ...insertData, 
           name: row.name?.toString(),
+          cpf: row.cpf?.toString()?.replace(/\D/g, ''), // Limpa máscara se houver
           age: parseInt(row.age) || null,
           gender: row.gender?.toString(),
           phone: row.phone?.toString(),
           email: row.email?.toString(),
           address: row.address?.toString()
         };
-        onConflict = "name";
+        onConflict = "cpf";
       }
 
       const { error } = await supabase.from(table).upsert(insertData, { onConflict });
