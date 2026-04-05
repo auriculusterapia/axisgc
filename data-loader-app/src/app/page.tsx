@@ -29,6 +29,7 @@ export default function Home() {
   const [fileName, setFileName] = useState("");
   const [parsedData, setParsedData] = useState<any[]>([]);
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
+  const [previewRows, setPreviewRows] = useState<any[][]>([]);
   const [isTruncateModalOpen, setIsTruncateModalOpen] = useState(false);
   const [truncateConfirm, setTruncateConfirm] = useState("");
 
@@ -84,10 +85,10 @@ export default function Home() {
       
       // Palavras-chave aprimoradas por categoria
       const keywordsMap: Record<Category, string[]> = {
-        procedures: ["codigo", "termo", "tuss", "procedimento"],
-        medical_supplies: ["codigo", "anvisa", "laboratorio", "produto", "apresentacao"],
-        inventory: ["nome", "quantidade", "estoque", "unidade", "custo", "validade"],
-        patients: ["nome", "idade", "sexo", "telefone", "celular", "email", "endereco", "cpf"]
+        procedures: ["codigo", "termo", "tuss", "procedimento", "code", "name", "service", "servico"],
+        medical_supplies: ["codigo", "anvisa", "laboratorio", "produto", "apresentacao", "code", "material", "med", "brand"],
+        inventory: ["nome", "quantidade", "estoque", "unidade", "custo", "validade", "name", "quantity", "stock", "unit", "cost", "expiry"],
+        patients: ["nome", "idade", "sexo", "telefone", "celular", "email", "endereco", "cpf", "name", "age", "gender", "phone", "mail", "address"]
       };
 
       const headerKeywords = keywordsMap[activeTab];
@@ -140,28 +141,28 @@ export default function Home() {
       const colMap: any = {};
 
       if (activeTab === "procedures" || activeTab === "medical_supplies") {
-        colMap.code = getIdx(["codigo", "tuss", "cod", "produto"]);
-        colMap.name = getIdx(["termo", "nome", "descricao", "procedimento"]);
-        colMap.presentation = getIdx(["apresentacao"]);
-        colMap.laboratory = getIdx(["laboratorio", "fabricante"]);
-        colMap.anvisa = getIdx(["anvisa", "registro"]);
+        colMap.code = getIdx(["codigo", "tuss", "cod", "produto", "code", "ean", "id"]);
+        colMap.name = getIdx(["termo", "nome", "descricao", "procedimento", "name", "service", "servico"]);
+        colMap.presentation = getIdx(["apresentacao", "unidade", "presentation", "unit", "env"]);
+        colMap.laboratory = getIdx(["laboratorio", "fabricante", "labor", "brand", "manufacturer"]);
+        colMap.anvisa = getIdx(["anvisa", "registro", "ms"]);
       } else if (activeTab === "inventory") {
-        colMap.name = getIdx(["nome", "item", "produto"]);
-        colMap.quantity = getIdx(["quantidade", "estoque", "atual", "qtd"]);
-        colMap.unit = getIdx(["unidade", "medida", "und"]);
-        colMap.category = getIdx(["categoria", "grupo"]);
-        colMap.unit_cost = getIdx(["custo", "preco", "valor"]);
-        colMap.expiry_date = getIdx(["validade", "vencimento"]);
+        colMap.name = getIdx(["nome", "item", "produto", "name", "description"]);
+        colMap.quantity = getIdx(["quantidade", "estoque", "atual", "qtd", "quantity", "stock", "count"]);
+        colMap.unit = getIdx(["unidade", "medida", "und", "unit", "uom"]);
+        colMap.category = getIdx(["categoria", "grupo", "category", "type"]);
+        colMap.unit_cost = getIdx(["custo", "preco", "valor", "cost", "price", "unit cost"]);
+        colMap.expiry_date = getIdx(["validade", "vencimento", "expiry", "expire"]);
       } else if (activeTab === "patients") {
-        colMap.name = getIdx(["nome", "paciente", "cliente"]);
-        colMap.cpf = getIdx(["cpf", "documento", "identificacao", "id"]);
-        colMap.age = getIdx(["idade", "nascimento", "data"]);
-        colMap.gender = getIdx(["sexo", "genero"]);
-        colMap.phone = getIdx(["telefone", "celular", "contato", "mobile"]);
-        colMap.email = getIdx(["email", "e-mail", "correio"]);
-        colMap.address = getIdx(["endereco", "logradouro", "rua"]);
-        colMap.marital_status = getIdx(["estado civil", "civil", "casado", "solteiro"]);
-        colMap.profession = getIdx(["profissao", "trabalho", "cargo", "ocupacao"]);
+        colMap.name = getIdx(["nome", "paciente", "cliente", "name", "full name", "patient"]);
+        colMap.cpf = getIdx(["cpf", "documento", "identificacao", "id", "doc"]);
+        colMap.age = getIdx(["idade", "nascimento", "data", "age", "birth"]);
+        colMap.gender = getIdx(["sexo", "genero", "gender", "sex"]);
+        colMap.phone = getIdx(["telefone", "celular", "contato", "mobile", "phone", "tel"]);
+        colMap.email = getIdx(["email", "e-mail", "correio", "mail"]);
+        colMap.address = getIdx(["endereco", "logradouro", "rua", "address", "street"]);
+        colMap.marital_status = getIdx(["estado civil", "civil", "casado", "solteiro", "marital", "marital_status"]);
+        colMap.profession = getIdx(["profissao", "trabalho", "cargo", "ocupacao", "profession", "job", "work"]);
       }
 
       for (let i = headerIndex + 1; i < rawData.length; i++) {
@@ -192,6 +193,7 @@ export default function Home() {
       }
 
       setParsedData(json);
+      setPreviewRows(rawData.slice(headerIndex + 1, headerIndex + 11)); // Store 10 rows
       setStage("READY");
       addLog(`✅ Planilha pronta: ${json.length} registros identificados.`);
     } catch (err: any) {
@@ -484,9 +486,9 @@ export default function Home() {
                           </tr>
                         </thead>
                         <tbody>
-                          {parsedData.slice(0, 5).map((row, ridx) => (
+                          {previewRows.slice(0, 5).map((row, ridx) => (
                             <tr key={ridx} className="border-b border-neutral-900 text-neutral-300">
-                              {Object.values(row).slice(0, 5).map((val: any, vidx) => (
+                              {row.slice(0, 5).map((val: any, vidx) => (
                                 <td key={vidx} className="p-3 border-r border-neutral-900 truncate max-w-[120px]">
                                   {val?.toString() || ""}
                                 </td>
