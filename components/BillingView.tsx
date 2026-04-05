@@ -124,9 +124,9 @@ export default function BillingView({
       setIsInsurerModalOpen(false);
       setEditingItem(null);
       if (onRefresh) onRefresh();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar operadora:', error);
-      alert('Erro ao salvar operadora. Verifique se o nome já existe.');
+      alert('Erro ao salvar operadora: ' + (error.message || 'Verifique se o nome já existe.'));
     } finally {
       setIsSaving(false);
     }
@@ -165,9 +165,9 @@ export default function BillingView({
       setIsPlanModalOpen(false);
       setEditingItem(null);
       if (onRefresh) onRefresh();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar plano:', error);
-      alert('Erro ao salvar plano. Verifique os dados.');
+      alert('Erro ao salvar plano: ' + (error.message || 'Verifique os dados.'));
     } finally {
       setIsSaving(false);
     }
@@ -185,9 +185,9 @@ export default function BillingView({
       setIsProcedureModalOpen(false);
       setEditingItem(null);
       if (onRefresh) onRefresh();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar procedimento:', error);
-      alert('Erro ao salvar procedimento.');
+      alert('Erro ao salvar procedimento: ' + (error.message || 'Ocorreu um erro inesperado.'));
     } finally {
       setIsSaving(false);
     }
@@ -203,10 +203,14 @@ export default function BillingView({
          unit_value = matchedPrice.unit_price;
       }
       
+      const serviceDate = new Date(manualItemForm.service_date);
+      const competence = `${serviceDate.getFullYear()}-${String(serviceDate.getMonth() + 1).padStart(2, '0')}`;
+
       const payload: any = { 
         ...manualItemForm,
-        unit_value,
-        total_presented_value: unit_value,
+        competence,
+        unit_value: Number(unit_value),
+        total_presented_value: Number(unit_value),
         status: 'pending',
         quantity: 1,
         created_by: user.id 
@@ -218,9 +222,9 @@ export default function BillingView({
       setIsManualItemModalOpen(false);
       setManualItemForm({ patient_id: '', insurance_plan_id: '', procedure_id: '', service_date: new Date().toISOString().split('T')[0], guia_number: '', auth_number: '' });
       if (onRefresh) onRefresh();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar item manual:', error);
-      alert('Erro ao criar Pendência TISS. Verifique os dados.');
+      alert('Erro ao criar Pendência TISS: ' + (error.message || 'Verifique os dados.'));
     } finally {
       setIsSaving(false);
     }
@@ -323,8 +327,9 @@ export default function BillingView({
       setSelectedIds(new Set());
       if (onRefresh) onRefresh();
       alert(`Lote #${batch.id.substring(0,8)} criado com sucesso para ${items[0]?.plan?.insurer?.name || 'Operadora'}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar lote:', error);
+      alert('Erro ao criar lote: ' + (error.message || 'Ocorreu um erro inesperado.'));
     } finally {
       setIsSaving(false);
     }
@@ -382,8 +387,9 @@ export default function BillingView({
 
       setIsReconciling(false);
       if (onRefresh) onRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao salvar conciliação:', err);
+      alert('Erro ao salvar conciliação: ' + (err.message || 'Ocorreu um erro inesperado.'));
     } finally {
       setReconcileSaving(false);
     }
@@ -413,8 +419,9 @@ export default function BillingView({
       }]);
       setGlossForm(null);
       if (onRefresh) onRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao salvar glosa:', err);
+      alert('Erro ao salvar glosa: ' + (err.message || 'Ocorreu um erro inesperado.'));
     }
   };
 
@@ -1539,7 +1546,7 @@ export default function BillingView({
                     <label className="text-xs font-bold text-outline uppercase tracking-widest">Procedimento</label>
                     <select value={manualItemForm.procedure_id} onChange={e => setManualItemForm({...manualItemForm, procedure_id: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none">
                       <option value="">Selecione o procedimento realizado...</option>
-                      {procedures.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {procedures.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
