@@ -411,30 +411,53 @@ export default function Home() {
 
             {(stage === "READY" || stage === "IMPORTING" || stage === "DONE") && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 bg-emerald-500/20 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/30">
-                      <FileSpreadsheet size={32} />
+                <div className="flex flex-col gap-6">
+                  <div className="flex items-center gap-5">
+                    <div className="h-16 w-16 bg-emerald-500/10 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/20 shrink-0 shadow-lg shadow-emerald-500/5">
+                      <FileSpreadsheet size={36} />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg line-clamp-1">{fileName}</h3>
-                      <p className="text-xs font-mono text-emerald-400">{parsedData.length} registros mapeados</p>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-black text-xl text-white truncate group-hover:text-emerald-400 transition-colors" title={fileName}>
+                        {fileName}
+                      </h3>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-black rounded-md uppercase tracking-wider">
+                          Mapeado
+                        </span>
+                        <p className="text-xs font-mono text-neutral-400">
+                          {parsedData.length.toLocaleString()} registros identificados
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+
+                  <div className="flex flex-wrap gap-3 p-1 bg-black/20 rounded-2xl border border-neutral-800/50">
                     {stage === "READY" && (
-                      <button onClick={processImport} className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2">
-                        <Play size={18} fill="currentColor" /> INICIAR CARGA
+                      <button 
+                        onClick={processImport} 
+                        className="flex-1 min-w-[200px] py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-3 group/btn"
+                      >
+                        <Play size={20} fill="currentColor" className="group-hover/btn:scale-110 transition-transform" /> 
+                        <span className="tracking-widest">INICIAR CARGA DE DADOS</span>
                       </button>
                     )}
                     {(stage === "READY" || stage === "DONE") && (
-                      <button onClick={() => setStage("IDLE")} className="p-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl transition-all">
-                        <RefreshCw size={18} />
+                      <button 
+                        onClick={() => {
+                          setStage("IDLE");
+                          setParsedData([]);
+                        }} 
+                        className="px-6 py-4 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold rounded-xl transition-all flex items-center gap-2"
+                      >
+                        <RefreshCw size={18} /> Novo Arquivo
                       </button>
                     )}
                     {stage === "IMPORTING" && (
-                      <button onClick={() => cancelRef.current = true} className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-black rounded-xl transition-all flex items-center gap-2">
-                        <XSquare size={18} /> PARAR
+                      <button 
+                        onClick={() => cancelRef.current = true} 
+                        className="flex-1 py-4 bg-red-600 hover:bg-red-500 text-white font-black rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-red-600/20"
+                      >
+                        <XSquare size={20} /> INTERROMPER PROCESSAMENTO
                       </button>
                     )}
                   </div>
