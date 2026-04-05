@@ -25,7 +25,7 @@ const navItems = [
   { id: 'patients', label: 'Pacientes', icon: Users },
   { id: 'calendar', label: 'Agenda', icon: Calendar },
   { id: 'evaluations', label: 'Avaliações', icon: ClipboardList },
-  { id: 'auricular', label: 'Mapa', icon: Sparkles },
+
   { id: 'protocols', label: 'Protocolos', icon: FileText },
   { id: 'financial', label: 'Finanças', icon: CreditCard },
   { id: 'billing', label: 'Faturas', icon: FileText },

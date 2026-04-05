@@ -120,6 +120,26 @@ export default function BillingView({
     }
   };
 
+  const handleDeleteInsurer = async () => {
+    if (!supabase || !editingItem?.id) return;
+    if (!window.confirm('Tem certeza que deseja excluir esta operadora?')) return;
+    
+    setIsSaving(true);
+    try {
+      const { error } = await (supabase as any).from('insurers').delete().eq('id', editingItem.id);
+      if (error) throw error;
+      
+      setIsInsurerModalOpen(false);
+      setEditingItem(null);
+      if (onRefresh) onRefresh();
+    } catch (error: any) {
+      console.error('Erro ao excluir operadora:', error);
+      alert('Erro ao excluir operadora. Motivo: ' + (error.message || 'Existem dependências atreladas, como Planos, Lotes ou Guias.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSavePlan = async () => {
     if (!supabase || !user) return;
     setIsSaving(true);
@@ -902,8 +922,14 @@ export default function BillingView({
                       <Building2 size={32} />
                     </div>
                     <h3 className="font-black text-on-surface">Nenhuma operadora cadastrada</h3>
-                    <p className="text-sm text-on-surface-variant mb-6">Comece cadastrando as operadoras que sua clínica atende.</p>
-                    <button className="px-6 py-3 bg-primary text-white font-bold rounded-2xl hover:brightness-110 shadow-lg shadow-primary/20">
+                    <button 
+                      onClick={() => {
+                         setEditingItem(null);
+                         setInsurerForm({ name: '', ans_registration: '', logo_url: '' });
+                         setIsInsurerModalOpen(true);
+                      }}
+                      className="px-6 py-3 bg-primary text-white font-bold rounded-2xl hover:brightness-110 shadow-lg shadow-primary/20"
+                    >
                       Cadastrar Operadora
                     </button>
                  </div>
@@ -914,7 +940,14 @@ export default function BillingView({
                       <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center font-black">
                         {insurer.name.substring(0, 2).toUpperCase()}
                       </div>
-                      <button className="p-2 hover:bg-surface-container rounded-xl transition-all">
+                      <button 
+                        onClick={() => {
+                          setEditingItem(insurer);
+                          setInsurerForm({ name: insurer.name, ans_registration: insurer.ans_registration || '', logo_url: '' });
+                          setIsInsurerModalOpen(true);
+                        }}
+                        className="p-2 hover:bg-surface-container rounded-xl transition-all"
+                      >
                         <MoreVertical size={18} />
                       </button>
                     </div>
@@ -1096,8 +1129,40 @@ export default function BillingView({
                   <label className="text-xs font-bold text-outline uppercase tracking-widest">Registro ANS</label>
                   <input type="text" value={insurerForm.ans_registration} onChange={e => setInsurerForm({...insurerForm, ans_registration: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none" placeholder="00000-0" />
                 </div>
-                <button onClick={handleSaveInsurer} disabled={isSaving} className="w-full py-4 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 hover:brightness-110 transition-all flex items-center justify-center gap-2">
-                  {isSaving ? 'Salvando...' : 'Salvar Operadora'}
+                <div className="flex gap-3 pt-2">
+                   {editingItem?.id && (
+                     <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteInsurer(); }} disabled={isSaving} className="py-4 px-6 border border-rose-200 text-rose-600 bg-rose-50 font-bold rounded-2xl hover:bg-rose-100 transition-all flex items-center justify-center">
+                       Excluir
+                     </button>
+                   )}
+                   <button type="button" onClick={(e) => { e.preventDefault(); handleSaveInsurer(); }} disabled={isSaving} className="flex-1 py-4 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 hover:brightness-110 transition-all flex items-center justify-center gap-2">
+                     {isSaving ? 'Salvando...' : 'Salvar Operadora'}
+                   </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isPlanModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPlanModalOpen(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden p-8">
+              <h3 className="text-2xl font-black text-on-surface mb-6">Cadastrar Plano</h3>
+              <div className="space-y-4">
+                 <div className="space-y-2">
+                  <label className="text-xs font-bold text-outline uppercase tracking-widest">Operadora</label>
+                  <select value={planForm.insurer_id} onChange={e => setPlanForm({...planForm, insurer_id: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none">
+                    <option value="">Selecione uma operadora...</option>
+                    {insurers.map((i: Insurer) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-outline uppercase tracking-widest">Nome do Plano</label>
+                  <input type="text" value={planForm.name} onChange={e => setPlanForm({...planForm, name: e.target.value})} className="w-full px-4 py-3 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none" placeholder="Ex: Saúde Top - Rede Nacional" />
+                </div>
+                <button onClick={handleSavePlan} disabled={isSaving} className="w-full py-4 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 hover:brightness-110 transition-all flex items-center justify-center gap-2">
+                  {isSaving ? 'Salvando...' : 'Salvar Plano'}
                 </button>
               </div>
             </motion.div>

@@ -7,7 +7,7 @@ import DashboardView from '@/components/DashboardView';
 import PatientsView from '@/components/PatientsView';
 import PatientDetailView from '@/components/PatientDetailView';
 import CalendarView from '@/components/CalendarView';
-import AuricularMapView from '@/components/AuricularMapView';
+
 import FinancialView from '@/components/FinancialView';
 import ProtocolsView from '@/components/ProtocolsView';
 import SettingsView from '@/components/SettingsView';
@@ -265,7 +265,7 @@ export default function Home() {
       }
       if (appointmentsData) {
         setAppointments((appointmentsData as any[]).map(a => {
-          const patient = patientsData.find((p: any) => p.id === a.patient_id);
+          const patient = (patientsData || []).find((p: any) => p.id === a.patient_id);
           return {
             ...a,
             patientId: a.patient_id,
@@ -1421,8 +1421,7 @@ export default function Home() {
             packages={packages}
           />
         );
-      case 'auricular':
-        return <AuricularMapView user={user} />;
+
       case 'protocols':
         return (
           <ProtocolsView 

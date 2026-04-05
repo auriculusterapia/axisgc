@@ -54,15 +54,7 @@ export const ALL_PERMISSIONS: Permission[] = [
       { id: 'calendar:delete', label: 'Cancelar' }
     ]
   },
-  { 
-    id: 'auricular', 
-    label: 'Mapa Auricular',
-    sub: [
-      { id: 'auricular:view', label: 'Visualizar Mapas' },
-      { id: 'auricular:edit', label: 'Marcar Pontos' },
-      { id: 'auricular:delete', label: 'Limpar/Excluir Mapa' }
-    ]
-  },
+
   { 
     id: 'protocols', 
     label: 'Protocolos',
@@ -162,7 +154,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'patients', 'patients:view', 'patients:create', 'patients:edit',
     'evaluations', 'evaluations:view', 'evaluations:create', 'evaluations:edit',
     'calendar', 'calendar:view', 'calendar:create', 'calendar:edit',
-    'auricular', 'auricular:view', 'auricular:edit',
     'protocols', 'protocols:view', 'protocols:create', 'protocols:edit',
     'inventory', 'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete',
     'billing', 'billing:view', 'billing:audit',
