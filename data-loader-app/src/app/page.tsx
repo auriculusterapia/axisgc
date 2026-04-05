@@ -160,16 +160,30 @@ export default function Home() {
         colMap.phone = getIdx(["telefone", "celular", "contato", "mobile"]);
         colMap.email = getIdx(["email", "e-mail", "correio"]);
         colMap.address = getIdx(["endereco", "logradouro", "rua"]);
+        colMap.marital_status = getIdx(["estado civil", "civil", "casado", "solteiro"]);
+        colMap.profession = getIdx(["profissao", "trabalho", "cargo", "ocupacao"]);
       }
 
       for (let i = headerIndex + 1; i < rawData.length; i++) {
         const rowArray = rawData[i];
         if (!rowArray || rowArray.length === 0) continue;
         
-        const rowObj: any = {};
+        const rowObj: any = { metadata: {} };
+        const mappedIndices = new Set(Object.values(colMap));
+
         Object.keys(colMap).forEach(key => {
           const idx = colMap[key];
-          if (idx !== -1) rowObj[key] = rowArray[idx];
+          if (idx !== -1 && idx !== undefined) {
+            rowObj[key] = rowArray[idx];
+          }
+        });
+
+        // Captura metadados: qualquer coluna que não foi mapeada explicitamente
+        rowArray.forEach((cell: any, idx: number) => {
+          if (!mappedIndices.has(idx) && cell !== undefined && cell !== null && cell.toString().trim() !== "") {
+            const headerName = previewHeaders[idx] || `campo_${idx}`;
+            rowObj.metadata[headerName] = cell;
+          }
         });
         
         if (rowObj.name || rowObj.code) {
@@ -231,7 +245,8 @@ export default function Home() {
           unit: row.unit?.toString() || "Unidade",
           category: row.category?.toString() || "Geral",
           unit_cost: parseFloat(row.unit_cost) || 0,
-          expiry_date: row.expiry_date
+          expiry_date: row.expiry_date,
+          metadata: row.metadata || {}
         };
         onConflict = "name";
       } else if (activeTab === "patients") {
@@ -244,7 +259,10 @@ export default function Home() {
           gender: row.gender?.toString(),
           phone: row.phone?.toString(),
           email: row.email?.toString(),
-          address: row.address?.toString()
+          address: row.address?.toString(),
+          marital_status: row.marital_status?.toString(),
+          profession: row.profession?.toString(),
+          metadata: row.metadata || {}
         };
         onConflict = "cpf";
       }
