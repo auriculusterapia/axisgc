@@ -178,26 +178,39 @@ export default function BillingView({
       let upsertCount = 0;
       
       for (const row of json) {
-         // Adapte para as colunas reais da planilha Brasíndice/Simpro
-         const code = row['Código do Termo'] || row['codigo'] || row['CODIGO'];
-         const name = row['Termo'] || row['nome'] || row['DESCRICAO'];
-         const presentation = row['Apresentação'] || row['apresentacao'];
-         const laboratory = row['Laboratório'] || row['laboratorio'];
-         const anvisa = row['Registro ANVISA'] || row['registro_anvisa'];
+         // Parse headers properly avoiding case or space issues
+         const keys = Object.keys(row);
+         const normalize = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+         
+         const findVal = (keywords: string[]) => {
+            const matchedKey = keys.find(k => keywords.some(kw => normalize(k).includes(kw)));
+            return matchedKey ? row[matchedKey] : undefined;
+         };
 
-         if (code && name) {
+         const code = findVal(['codigo do termo', 'codigo', 'cod']);
+         const name = findVal(['termo', 'nome', 'descricao']);
+         const presentation = findVal(['apresentacao']);
+         const laboratory = findVal(['laboratorio']);
+         const anvisa = findVal(['anvisa', 'registro']);
+
+         // Ignora linhas que não parecem com itens faturáveis (ex: cabeçalhos extras)
+         if (code && name && code.toString().trim() !== '' && name.toString().trim() !== '') {
             const { error } = await (supabase as any).from('medical_supplies').upsert({
-               code: code.toString(),
-               name: name.toString(),
-               presentation: presentation?.toString() || '',
-               laboratory: laboratory?.toString() || '',
-               anvisa_registry: anvisa?.toString() || '',
+               code: code.toString().trim(),
+               name: name.toString().trim(),
+               presentation: presentation?.toString().trim() || '',
+               laboratory: laboratory?.toString().trim() || '',
+               anvisa_registry: anvisa?.toString().trim() || '',
                category: activePricesTab === 'procedures' ? 'tuss' : 'medicamento',
                updated_at: new Date().toISOString()
             }, {
                onConflict: 'code'
             });
-            if (!error) upsertCount++;
+            if (!error) {
+               upsertCount++;
+            } else {
+               console.error('Upsert erro no item:', code, error);
+            }
          }
       }
 
