@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import BillingView from '@/components/BillingView';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { BillingItem, BillingBatch, Insurer, InsurancePlan, InsurancePrice } from '@/types/billing';
+import { BillingItem, BillingBatch, Insurer, InsurancePlan, InsurancePrice, MedicalSupply } from '@/types/billing';
 
 export default function BillingPage() {
   const { user } = useAuth();
@@ -16,6 +16,7 @@ export default function BillingPage() {
   const [plans, setPlans] = useState<InsurancePlan[]>([]);
   const [prices, setPrices] = useState<InsurancePrice[]>([]);
   const [procedures, setProcedures] = useState<any[]>([]);
+  const [medicalSupplies, setMedicalSupplies] = useState<MedicalSupply[]>([]);
 
   const fetchData = useCallback(async () => {
     if (!supabase) return;
@@ -47,16 +48,19 @@ export default function BillingPage() {
       const [
         { data: insurersData, error: insurersError },
         { data: plansData, error: plansError },
-        { data: proceduresData, error: proceduresError }
+        { data: proceduresData, error: proceduresError },
+        { data: suppliesData, error: suppliesError }
       ] = await Promise.all([
         (supabase as any).from('insurers').select('*').order('name'),
         (supabase as any).from('insurance_plans').select('*, insurer:insurers(name)').order('name'),
-        (supabase as any).from('procedures').select('*').order('name')
+        (supabase as any).from('procedures').select('*').order('name'),
+        (supabase as any).from('medical_supplies').select('*').order('name')
       ]);
 
       if (insurersError) throw insurersError;
       if (plansError) throw plansError;
       if (proceduresError) throw proceduresError;
+      if (suppliesError) throw suppliesError;
 
       // 4. Fetch Prices
       const { data: pricesData, error: pricesError } = await (supabase as any)
@@ -73,6 +77,7 @@ export default function BillingPage() {
       setInsurers(insurersData || []);
       setPlans(plansData || []);
       setProcedures(proceduresData || []);
+      setMedicalSupplies(suppliesData || []);
       setPrices(pricesData || []);
 
     } catch (error) {
@@ -103,6 +108,7 @@ export default function BillingPage() {
       plans={plans}
       prices={prices}
       procedures={procedures}
+      medicalSupplies={medicalSupplies}
       loading={loading}
       onRefresh={fetchData}
     />

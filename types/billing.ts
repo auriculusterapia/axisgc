@@ -46,14 +46,28 @@ export interface Procedure {
   updated_at: string;
 }
 
+export interface MedicalSupply {
+  id: string;
+  code: string;
+  name: string;
+  presentation?: string;
+  laboratory?: string;
+  anvisa_registry?: string;
+  category?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface InsurancePrice {
   id: string;
   plan_id: string;
-  procedure_id: string;
+  procedure_id?: string;
+  medical_supply_id?: string;
   unit_price: number;
   valid_from?: string;
   valid_until?: string;
   procedure?: Procedure;
+  medical_supply?: MedicalSupply;
 }
 
 export interface PatientInsurance {
@@ -86,7 +100,8 @@ export interface BillingItem {
   patient_id: string;
   professional_id: string;
   insurance_plan_id: string;
-  procedure_id: string;
+  procedure_id?: string;
+  medical_supply_id?: string;
   appointment_id?: string;
   batch_id?: string;
   service_date: string;
@@ -104,6 +119,7 @@ export interface BillingItem {
   professional?: User;
   plan?: InsurancePlan;
   procedure?: Procedure;
+  medical_supply?: MedicalSupply;
   batch?: BillingBatch;
   glosses?: BillingGloss[];
   

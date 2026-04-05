@@ -28,8 +28,9 @@ import {
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { User } from '@/types/auth';
-import { BillingItem, BillingBatch, Insurer, InsurancePlan, InsurancePrice, BillingItemStatus, Procedure } from '@/types/billing';
+import { BillingItem, BillingBatch, Insurer, InsurancePlan, InsurancePrice, BillingItemStatus, Procedure, MedicalSupply } from '@/types/billing';
 import { supabase } from '@/lib/supabase';
+import * as XLSX from 'xlsx';
 
 interface BillingViewProps {
   user: User;
@@ -39,6 +40,7 @@ interface BillingViewProps {
   plans?: InsurancePlan[];
   prices?: InsurancePrice[];
   procedures?: Procedure[];
+  medicalSupplies?: MedicalSupply[];
   patients?: any[];
   loading?: boolean;
   onRefresh?: () => void;
@@ -52,12 +54,16 @@ export default function BillingView({
   plans = [], 
   prices = [],
   procedures = [],
+  medicalSupplies = [],
   patients = [],
   loading = false,
   onRefresh 
 }: BillingViewProps) {
   const [activeTab, setActiveTab] = useState<'pendencies' | 'batches' | 'analytics' | 'insurers' | 'prices'>('pendencies');
+  const [activePricesTab, setActivePricesTab] = useState<'procedures' | 'medicalSupplies'>('procedures');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -158,6 +164,54 @@ export default function BillingView({
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !supabase) return;
+    setIsImporting(true);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json<any>(worksheet);
+
+      let upsertCount = 0;
+      
+      for (const row of json) {
+         // Adapte para as colunas reais da planilha Brasíndice/Simpro
+         const code = row['Código do Termo'] || row['codigo'] || row['CODIGO'];
+         const name = row['Termo'] || row['nome'] || row['DESCRICAO'];
+         const presentation = row['Apresentação'] || row['apresentacao'];
+         const laboratory = row['Laboratório'] || row['laboratorio'];
+         const anvisa = row['Registro ANVISA'] || row['registro_anvisa'];
+
+         if (code && name) {
+            const { error } = await (supabase as any).from('medical_supplies').upsert({
+               code: code.toString(),
+               name: name.toString(),
+               presentation: presentation?.toString() || '',
+               laboratory: laboratory?.toString() || '',
+               anvisa_registry: anvisa?.toString() || '',
+               category: activePricesTab === 'procedures' ? 'tuss' : 'medicamento',
+               updated_at: new Date().toISOString()
+            }, {
+               onConflict: 'code'
+            });
+            if (!error) upsertCount++;
+         }
+      }
+
+      alert(`Importação concluída. ${upsertCount} registros atualizados com sucesso!`);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Erro na importação:', err);
+      alert('Erro ao processar a planilha. Verifique as colunas (Código do Termo e Termo são obrigatórias).');
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSaveManualItem = async () => {
     if (!supabase || !user) return;
     setIsSaving(true);
@@ -165,7 +219,7 @@ export default function BillingView({
       let unit_value = 0;
       const matchedPrice = prices.find(p => p.plan_id === manualItemForm.insurance_plan_id && p.procedure_id === manualItemForm.procedure_id);
       if (matchedPrice) {
-         unit_value = matchedPrice.value;
+         unit_value = matchedPrice.unit_price;
       }
       
       const payload: any = { 
@@ -953,30 +1007,128 @@ export default function BillingView({
                exit={{ opacity: 0, y: -10 }}
                className="flex flex-col gap-6"
             >
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {(prices.length === 0 && procedures.length === 0) ? (
-                    <div className="col-span-full flex flex-col items-center justify-center p-20 text-center bg-white border border-outline-variant/20 rounded-3xl">
-                      <div className="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-on-surface-variant/30 mb-4">
-                        <ListOrdered size={32} />
-                      </div>
-                      <h3 className="font-black text-on-surface">Tabelas de Procedimentos (TUSS)</h3>
-                      <p className="text-sm text-on-surface-variant max-w-md mx-auto">
-                        Configure os valores negociados para cada procedimento por plano de saúde.
-                      </p>
+                {/* Inner Tabs for Prices & Supplies */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-2 rounded-2xl border border-outline-variant/10 shadow-sm">
+                  <div className="flex bg-surface-container-low p-1 rounded-xl">
+                    <button
+                      onClick={() => setActivePricesTab('procedures')}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-sm font-bold transition-all",
+                        activePricesTab === 'procedures' ? "bg-white text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+                      )}
+                    >
+                      Procedimentos (TUSS)
+                    </button>
+                    <button
+                      onClick={() => setActivePricesTab('medicalSupplies')}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-sm font-bold transition-all",
+                        activePricesTab === 'medicalSupplies' ? "bg-white text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+                      )}
+                    >
+                      Materiais & Medicamentos
+                    </button>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 px-2">
+                    {/* Add CSV Upload button */}
+                    <div className="relative overflow-hidden">
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileUpload} 
+                        accept=".xlsx, .xls, .csv" 
+                        className="hidden" 
+                      />
+                      <button 
+                         onClick={() => fileInputRef.current?.click()}
+                         disabled={isImporting}
+                         className="flex items-center gap-2 px-4 py-2 bg-surface-container-highest text-on-surface font-bold rounded-xl hover:bg-outline-variant/20 transition-all text-sm group disabled:opacity-50"
+                      >
+                        {isImporting ? (
+                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Plus size={16} className="group-hover:text-primary transition-colors" />
+                        )}
+                        {isImporting ? 'Importando...' : 'Importar Planilha'}
+                      </button>
                     </div>
-                  ) : (
-                    procedures.map((proc: Procedure) => (
-                      <div key={proc.id} className="bg-white p-6 rounded-3xl border border-outline-variant/20 shadow-sm hover:shadow-xl transition-all">
-                        <div className="flex justify-between items-start mb-4">
-                          <span className="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-bold uppercase">{proc.category || 'TUSS'}</span>
-                          <button className="p-2 hover:bg-surface-container rounded-xl transition-all"><MoreVertical size={16} /></button>
-                        </div>
-                        <h4 className="font-black text-on-surface">{proc.name}</h4>
-                        <p className="text-xs font-mono text-primary font-bold mt-1">Código: {proc.code}</p>
-                      </div>
-                    ))
-                  )}
+                  </div>
                 </div>
+
+                {activePricesTab === 'procedures' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {(prices.length === 0 && procedures.length === 0) ? (
+                      <div className="col-span-full flex flex-col items-center justify-center p-20 text-center bg-white border border-outline-variant/20 rounded-3xl">
+                        <div className="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center text-on-surface-variant/30 mb-4">
+                          <ListOrdered size={32} />
+                        </div>
+                        <h3 className="font-black text-on-surface">Tabelas de Procedimentos (TUSS)</h3>
+                        <p className="text-sm text-on-surface-variant max-w-md mx-auto">
+                          Configure os valores negociados para cada procedimento por plano de saúde.
+                        </p>
+                      </div>
+                    ) : (
+                      procedures.map((proc: Procedure) => (
+                        <div key={proc.id} className="bg-white p-6 rounded-3xl border border-outline-variant/20 shadow-sm hover:shadow-xl transition-all">
+                          <div className="flex justify-between items-start mb-4">
+                            <span className="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-bold uppercase">{proc.category || 'TUSS'}</span>
+                            <button className="p-2 hover:bg-surface-container rounded-xl transition-all"><MoreVertical size={16} /></button>
+                          </div>
+                          <h4 className="font-black text-on-surface">{proc.name}</h4>
+                          <p className="text-xs font-mono text-primary font-bold mt-1">Código: {proc.code}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {activePricesTab === 'medicalSupplies' && (
+                  <div className="flex flex-col gap-4">
+                    {medicalSupplies.length > 0 && (
+                      <div className="text-xs font-bold text-on-surface-variant flex items-center gap-2 px-2">
+                        <Clock size={14} />
+                        Última Carga: {new Date(medicalSupplies[0]?.updated_at || new Date()).toLocaleString('pt-BR')}
+                      </div>
+                    )}
+                    
+                    <div className="bg-white rounded-3xl border border-outline-variant/20 shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                           <thead>
+                             <tr className="bg-surface-container-low border-b border-outline-variant/30">
+                               <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Código</th>
+                               <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Material/Medicamento</th>
+                               <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Apresentação</th>
+                               <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Registro ANVISA</th>
+                             </tr>
+                           </thead>
+                           <tbody className="divide-y divide-outline-variant/10">
+                             {medicalSupplies.length === 0 ? (
+                               <tr>
+                                  <td colSpan={4} className="px-5 py-12 text-center text-sm font-bold text-on-surface-variant">
+                                    Nenhum material ou medicamento importado. Adicione uma planilha para começar.
+                                  </td>
+                               </tr>
+                             ) : (
+                               medicalSupplies.map(supply => (
+                                 <tr key={supply.id} className="hover:bg-surface-container-lowest transition-colors">
+                                   <td className="px-5 py-3 font-mono text-xs font-bold text-primary">{supply.code}</td>
+                                   <td className="px-5 py-3 text-sm font-bold text-on-surface">
+                                      {supply.name}
+                                      <div className="text-[10px] text-on-surface-variant uppercase font-normal">{supply.laboratory}</div>
+                                   </td>
+                                   <td className="px-5 py-3 text-xs text-on-surface-variant">{supply.presentation || '---'}</td>
+                                   <td className="px-5 py-3 text-xs text-on-surface-variant font-mono">{supply.anvisa_registry || '---'}</td>
+                                 </tr>
+                               ))
+                             )}
+                           </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
             </motion.div>
           )}
         </AnimatePresence>
