@@ -273,6 +273,21 @@ export default function Home() {
     }
   };
 
+  // Função para converter data serial do Excel em string ISO
+  const excelDateToISO = (serial: any) => {
+    if (!serial) return null;
+    const num = parseFloat(serial);
+    if (isNaN(num) || num < 10000) return serial.toString(); // Provavelmente já é uma string de data
+    
+    try {
+      // Excel base date: 30/12/1899
+      const date = new Date(Math.round((num - 25569) * 86400 * 1000));
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      return serial.toString();
+    }
+  };
+
   const processImport = async () => {
     if (parsedData.length === 0 || !userId) return;
     setStage("IMPORTING");
@@ -333,7 +348,7 @@ export default function Home() {
             unit: row.unit?.toString() || "Unidade",
             category: row.category?.toString() || "Geral",
             unit_cost: parseFloat(row.unit_cost) || 0,
-            expiry_date: row.expiry_date,
+            expiry_date: excelDateToISO(row.expiry_date),
             batch: row.batch?.toString(),
             manufacturer: row.manufacturer?.toString()
           };
