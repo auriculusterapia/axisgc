@@ -54,6 +54,8 @@ export default function InventoryPage() {
         category: data.category,
         expiry_date: data.expiry_date || null,
         unit_cost: data.unit_cost || 0,
+        batch: data.batch || null,
+        manufacturer: data.manufacturer || null,
         updated_at: new Date().toISOString()
       };
 

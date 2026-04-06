@@ -54,6 +54,8 @@ export interface MedicalSupply {
   laboratory?: string;
   anvisa_registry?: string;
   category?: string;
+  batch?: string;
+  manufacturer?: string;
   created_at: string;
   updated_at: string;
 }

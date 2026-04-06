@@ -153,8 +153,8 @@ export default function Home() {
       // Palavras-chave aprimoradas por categoria
       const keywordsMap: Record<Category, string[]> = {
         procedures: ["codigo", "termo", "tuss", "procedimento", "code", "name", "service", "servico"],
-        medical_supplies: ["codigo", "anvisa", "laboratorio", "produto", "apresentacao", "code", "material", "med", "brand"],
-        inventory: ["nome", "quantidade", "estoque", "unidade", "custo", "validade", "name", "quantity", "stock", "unit", "cost", "expiry"],
+        medical_supplies: ["codigo", "anvisa", "laboratorio", "produto", "apresentacao", "code", "material", "med", "brand", "lote", "batch", "fabricante", "manufacturer"],
+        inventory: ["nome", "quantidade", "estoque", "unidade", "custo", "validade", "name", "quantity", "stock", "unit", "cost", "expiry", "lote", "batch", "fabricante", "manufacturer"],
         patients: ["nome", "idade", "sexo", "telefone", "celular", "email", "endereco", "cpf", "name", "age", "gender", "phone", "mail", "address"]
       };
 
@@ -213,6 +213,8 @@ export default function Home() {
         colMap.presentation = getIdx(["apresentacao", "unidade", "presentation", "unit", "env"]);
         colMap.laboratory = getIdx(["laboratorio", "fabricante", "labor", "brand", "manufacturer"]);
         colMap.anvisa = getIdx(["anvisa", "registro", "ms"]);
+        colMap.batch = getIdx(["lote", "batch", "partida", "serie"]);
+        colMap.manufacturer = getIdx(["fabricante", "marca", "manufacturer", "brand", "lab"]);
       } else if (activeTab === "inventory") {
         colMap.name = getIdx(["nome", "item", "produto", "name", "description"]);
         colMap.quantity = getIdx(["quantidade", "estoque", "atual", "qtd", "quantity", "stock", "count"]);
@@ -220,6 +222,8 @@ export default function Home() {
         colMap.category = getIdx(["categoria", "grupo", "category", "type"]);
         colMap.unit_cost = getIdx(["custo", "preco", "valor", "cost", "price", "unit cost"]);
         colMap.expiry_date = getIdx(["validade", "vencimento", "expiry", "expire"]);
+        colMap.batch = getIdx(["lote", "batch", "partida", "serie"]);
+        colMap.manufacturer = getIdx(["fabricante", "marca", "manufacturer", "brand"]);
       } else if (activeTab === "patients") {
         colMap.name = getIdx(["nome", "paciente", "cliente", "name", "full name", "patient"]);
         colMap.cpf = getIdx(["cpf", "documento", "identificacao", "id", "doc"]);
@@ -315,6 +319,8 @@ export default function Home() {
             presentation: row.presentation?.toString(),
             laboratory: row.laboratory?.toString(),
             anvisa_registry: row.anvisa?.toString(),
+            batch: row.batch?.toString(),
+            manufacturer: row.manufacturer?.toString(),
             category: "medicamento"
           };
         } else if (activeTab === "inventory") {
@@ -327,7 +333,9 @@ export default function Home() {
             unit: row.unit?.toString() || "Unidade",
             category: row.category?.toString() || "Geral",
             unit_cost: parseFloat(row.unit_cost) || 0,
-            expiry_date: row.expiry_date
+            expiry_date: row.expiry_date,
+            batch: row.batch?.toString(),
+            manufacturer: row.manufacturer?.toString()
           };
         } else if (activeTab === "patients") {
           const cpf = row.cpf?.toString()?.replace(/\D/g, '');

@@ -29,6 +29,8 @@ interface InventoryItem {
   category: string;
   expiry_date?: string;
   unit_cost?: number;
+  batch?: string;
+  manufacturer?: string;
   color?: string; // Client-only
 }
 
@@ -81,7 +83,9 @@ export default function InventoryView({
     unit: 'Unidade',
     category: 'Descartáveis',
     expiry_date: '',
-    unit_cost: 0
+    unit_cost: 0,
+    batch: '',
+    manufacturer: ''
   });
 
   // Form State - Transaction
@@ -112,7 +116,9 @@ export default function InventoryView({
         unit: item.unit,
         category: item.category || 'Outros',
         expiry_date: item.expiry_date || '',
-        unit_cost: item.unit_cost || 0
+        unit_cost: item.unit_cost || 0,
+        batch: item.batch || '',
+        manufacturer: item.manufacturer || ''
       });
     } else {
       setEditingItem(null);
@@ -124,7 +130,9 @@ export default function InventoryView({
         unit: 'Unidade',
         category: 'Descartáveis',
         expiry_date: '',
-        unit_cost: 0
+        unit_cost: 0,
+        batch: '',
+        manufacturer: ''
       });
     }
     setIsItemModalOpen(true);
@@ -286,6 +294,7 @@ export default function InventoryView({
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline">Categoria</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-right">Custo Un.</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-right">Validade</th>
+                <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline">Lote/Fab.</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-right">Estoque</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-center">Status</th>
                 <th className="py-5 px-6 font-bold text-xs uppercase tracking-widest text-outline text-right">Ações</th>
@@ -337,6 +346,12 @@ export default function InventoryView({
                         ) : (
                           <span className="text-sm text-outline">-</span>
                         )}
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-on-surface">{item.batch || '-'}</span>
+                          <span className="text-[10px] text-outline uppercase">{item.manufacturer || '-'}</span>
+                        </div>
                       </td>
                       <td className="py-4 px-6 text-right">
                         <span className="text-xl font-bold font-headline">{item.quantity}</span>
@@ -443,6 +458,29 @@ export default function InventoryView({
                     className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
                     placeholder="Ex: Agulha de Acupuntura 0.25x30mm"
                   />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Lote</label>
+                    <input 
+                      type="text" 
+                      value={itemFormData.batch}
+                      onChange={e => setItemFormData({...itemFormData, batch: e.target.value})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest">Fabricante</label>
+                    <input 
+                      type="text" 
+                      value={itemFormData.manufacturer}
+                      onChange={e => setItemFormData({...itemFormData, manufacturer: e.target.value})}
+                      className="w-full px-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium"
+                      placeholder="Opcional"
+                    />
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
