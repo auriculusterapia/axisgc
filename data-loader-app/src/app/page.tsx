@@ -5,7 +5,8 @@ import * as XLSX from "xlsx";
 import { 
   Upload, FileSpreadsheet, Package, DatabaseZap, Play, XSquare, 
   CheckCircle, Trash2, Users, BarChart3, Info, Settings, 
-  ChevronRight, AlertTriangle, Terminal as TerminalIcon, RefreshCw
+  ChevronRight, AlertTriangle, Terminal as TerminalIcon, RefreshCw,
+  LogIn, LogOut, Mail, Lock, ShieldCheck, Eye, EyeOff
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -31,9 +32,17 @@ export default function Home() {
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<any[][]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isTruncateModalOpen, setIsTruncateModalOpen] = useState(false);
   const [truncateConfirm, setTruncateConfirm] = useState("");
+  
+  // Estados de Login
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const addLog = (msg: string) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${msg}`, ...prev].slice(0, 100));
@@ -71,13 +80,59 @@ export default function Home() {
       const { data } = await supabase.auth.getSession();
       if (data?.session?.user) {
         setUserId(data.session.user.id);
+        setUserEmail(data.session.user.email || "Usuário");
+      } else {
+        setUserId(null);
+        setUserEmail(null);
       }
     };
     getAuth();
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUserId(session.user.id);
+        setUserEmail(session.user.email || "Usuário");
+      } else {
+        setUserId(null);
+        setUserEmail(null);
+      }
+    });
+
     const interval = setInterval(fetchDbStats, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      subscription.unsubscribe();
+    };
   }, []);
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoginLoading(true);
+    addLog(`🔐 Tentando autenticação para ${email}...`);
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        setUserId(data.user.id);
+        setUserEmail(data.user.email || "Operador");
+        addLog(`✅ Acesso concedido! Bem-vindo, ${data.user.email}`);
+        setShowLoginModal(false);
+        setPassword("");
+        fetchDbStats();
+      }
+    } catch (err: any) {
+      addLog(`❌ Falha no login: ${err.message}`);
+      alert(`Erro de autenticação: ${err.message}`);
+    } finally {
+      setIsLoginLoading(false);
+    }
+  };
 
   const handleFileSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -215,90 +270,108 @@ export default function Home() {
   };
 
   const processImport = async () => {
-    if (parsedData.length === 0) return;
+    if (parsedData.length === 0 || !userId) return;
     setStage("IMPORTING");
     cancelRef.current = false;
     let successCount = 0;
     let errorCount = 0;
 
-    addLog(`🚀 Iniciando carga para ${activeTab}...`);
+    addLog(`🚀 Iniciando carga em LOTES para ${activeTab}...`);
+    
+    // Configurações de lote
+    const BATCH_SIZE = 500;
+    const totalBatches = Math.ceil(parsedData.length / BATCH_SIZE);
 
-    for (let i = 0; i < parsedData.length; i++) {
+    for (let b = 0; b < totalBatches; b++) {
       if (cancelRef.current) {
          addLog(`🛑 Interrompido pelo usuário.`);
          break;
       }
 
-      const row = parsedData[i];
-      let table = "";
-      let insertData: any = { 
-        updated_at: new Date().toISOString(),
-        created_by: userId 
-      };
-      let onConflict = "id";
+      const start = b * BATCH_SIZE;
+      const end = Math.min(start + BATCH_SIZE, parsedData.length);
+      const chunk = parsedData.slice(start, end);
+      
+      addLog(`📦 Processando lote ${b + 1}/${totalBatches} (${chunk.length} registros)...`);
 
-      if (activeTab === "procedures") {
-        table = "procedures";
-        insertData = { ...insertData, code: row.code?.toString(), name: row.name?.toString(), category: "tuss" };
-        onConflict = "code";
-      } else if (activeTab === "medical_supplies") {
-        table = "medical_supplies";
-        insertData = { 
-          ...insertData, 
-          code: row.code?.toString(), 
-          name: row.name?.toString(),
-          presentation: row.presentation?.toString(),
-          laboratory: row.laboratory?.toString(),
-          anvisa_registry: row.anvisa?.toString(),
-          category: "medicamento"
-        };
-        onConflict = "code";
-      } else if (activeTab === "inventory") {
-        table = "inventory_items";
-        insertData = { 
-          ...insertData, 
-          name: row.name?.toString(),
-          quantity: parseFloat(row.quantity) || 0,
-          unit: row.unit?.toString() || "Unidade",
-          category: row.category?.toString() || "Geral",
-          unit_cost: parseFloat(row.unit_cost) || 0,
-          expiry_date: row.expiry_date,
+      const batchToInsert = chunk.map(row => {
+        let insertData: any = { 
+          updated_at: new Date().toISOString(),
+          created_by: userId,
           metadata: row.metadata || {}
         };
-        onConflict = "name";
-      } else if (activeTab === "patients") {
-        table = "patients";
-        insertData = { 
-          ...insertData, 
-          name: row.name?.toString(),
-          cpf: row.cpf?.toString()?.replace(/\D/g, ''), // Limpa máscara se houver
-          age: parseInt(row.age) || null,
-          gender: row.gender?.toString(),
-          phone: row.phone?.toString(),
-          email: row.email?.toString(),
-          address: row.address?.toString(),
-          marital_status: row.marital_status?.toString(),
-          profession: row.profession?.toString(),
-          metadata: row.metadata || {}
-        };
-        onConflict = "cpf";
+
+        if (activeTab === "procedures") {
+          const code = row.code?.toString()?.trim();
+          if (!code) return null; // Ignora se não tiver código
+          return { ...insertData, code, name: row.name?.toString(), category: "tuss" };
+        } else if (activeTab === "medical_supplies") {
+          const code = row.code?.toString()?.trim();
+          if (!code) return null; // Ignora se não tiver código
+          return { 
+            ...insertData, 
+            code, 
+            name: row.name?.toString(),
+            presentation: row.presentation?.toString(),
+            laboratory: row.laboratory?.toString(),
+            anvisa_registry: row.anvisa?.toString(),
+            category: "medicamento"
+          };
+        } else if (activeTab === "inventory") {
+          const name = row.name?.toString()?.trim();
+          if (!name) return null; // Ignora se não tiver nome
+          return { 
+            ...insertData, 
+            name,
+            quantity: parseFloat(row.quantity) || 0,
+            unit: row.unit?.toString() || "Unidade",
+            category: row.category?.toString() || "Geral",
+            unit_cost: parseFloat(row.unit_cost) || 0,
+            expiry_date: row.expiry_date
+          };
+        } else if (activeTab === "patients") {
+          const cpf = row.cpf?.toString()?.replace(/\D/g, '');
+          if (!cpf) return null; // Ignora se não tiver CPF
+          return { 
+            ...insertData, 
+            name: row.name?.toString(),
+            cpf,
+            age: parseInt(row.age) || null,
+            gender: row.gender?.toString(),
+            phone: row.phone?.toString(),
+            email: row.email?.toString(),
+            address: row.address?.toString(),
+            marital_status: row.marital_status?.toString(),
+            profession: row.profession?.toString()
+          };
+        }
+        return insertData;
+      }).filter(Boolean); // Remove os registros nulos (sem chave única)
+
+      if (batchToInsert.length === 0) {
+        addLog(`⚠️ Lote ${b + 1} ignorado: Nenhum registro válido com identificador único.`);
+        continue;
       }
 
-      const { error } = await supabase.from(table).upsert(insertData, { onConflict });
+      let table = "";
+      let onConflict = "id";
+      if (activeTab === "procedures") { table = "procedures"; onConflict = "code"; }
+      else if (activeTab === "medical_supplies") { table = "medical_supplies"; onConflict = "code"; }
+      else if (activeTab === "inventory") { table = "inventory_items"; onConflict = "name"; }
+      else if (activeTab === "patients") { table = "patients"; onConflict = "cpf"; }
+
+      const { error } = await supabase.from(table).upsert(batchToInsert, { onConflict });
 
       if (!error) {
-        successCount++;
+        successCount += batchToInsert.length;
       } else {
-        errorCount++;
-        if (errorCount <= 5) addLog(`❌ Erro no registro ${i+1}: ${error.message}`);
+        errorCount += batchToInsert.length;
+        addLog(`❌ Erro no lote ${b + 1}: ${error.message}`);
       }
 
-      if (i > 0 && i % 20 === 0) {
-        setStats({ success: successCount, errors: errorCount });
-      }
+      setStats({ success: successCount, errors: errorCount });
     }
 
-    setStats({ success: successCount, errors: errorCount });
     addLog(`🏁 Carga concluída: ${successCount} sucessos, ${errorCount} erros.`);
     setStage("DONE");
     setShowSuccessModal(true);
@@ -340,11 +413,42 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-neutral-500">
-                DATA LOADER <span className="text-xs text-indigo-500 ml-1">v2.0</span>
+                DATA LOADER <span className="text-xs text-indigo-500 ml-1">v2.1</span>
               </h1>
-              <p className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">Enterprise Ingestion Suite</p>
+              <p className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold italic">High-Speed Ingestion</p>
             </div>
           </header>
+
+          <div className="mb-2 p-4 bg-neutral-900/80 border border-neutral-800/50 rounded-2xl flex flex-col gap-3">
+             <div className="flex items-center gap-3">
+                <div className={`h-3 w-3 rounded-full animate-pulse ${userId ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"}`} />
+                <div className="min-w-0 flex-1">
+                   <span className="block text-[10px] font-black text-neutral-500 uppercase tracking-widest">
+                     {userId ? "Operador Autenticado" : "Acesso Restrito"}
+                   </span>
+                   <span className="block text-xs font-bold text-neutral-200 truncate">
+                     {userEmail || "Sistema Bloqueado"}
+                   </span>
+                </div>
+                {userId && (
+                  <button 
+                    onClick={() => supabase.auth.signOut()}
+                    className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors"
+                    title="Sair"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                )}
+             </div>
+             {!userId && (
+               <button 
+                 onClick={() => setShowLoginModal(true)}
+                 className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black rounded-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+               >
+                 <LogIn size={12} /> Conectar ao Sistema
+               </button>
+             )}
+          </div>
 
           <nav className="space-y-2">
             {(["procedures", "medical_supplies", "inventory", "patients"] as Category[]).map((cat) => (
@@ -453,10 +557,17 @@ export default function Home() {
                     {stage === "READY" && (
                       <button 
                         onClick={processImport} 
-                        className="flex-1 min-w-[200px] py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-3 group/btn"
+                        disabled={!userId}
+                        className={`flex-1 min-w-[200px] py-4 font-black rounded-xl shadow-xl transition-all flex items-center justify-center gap-3 group/btn ${
+                          userId 
+                            ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20" 
+                            : "bg-neutral-800 text-neutral-500 cursor-not-allowed opacity-50"
+                        }`}
                       >
                         <Play size={20} fill="currentColor" className="group-hover/btn:scale-110 transition-transform" /> 
-                        <span className="tracking-widest">INICIAR CARGA DE DADOS</span>
+                        <span className="tracking-widest">
+                          {userId ? "INICIAR CARGA DE DADOS" : "ACESSO NEGADO: FAÇA LOGIN"}
+                        </span>
                       </button>
                     )}
                     {(stage === "READY" || stage === "DONE") && (
@@ -621,6 +732,86 @@ export default function Home() {
            </div>
         </div>
       )}
+      {/* Modal de Login */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={() => !isLoginLoading && setShowLoginModal(false)}></div>
+          <form 
+            onSubmit={handleSignIn}
+            className="relative bg-neutral-900 border border-indigo-500/30 p-10 rounded-[2.5rem] max-w-sm w-full shadow-2xl shadow-indigo-500/10 animate-in fade-in zoom-in-95 duration-300"
+          >
+            <div className="w-16 h-16 bg-indigo-600/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-indigo-400 border border-indigo-500/20">
+              <ShieldCheck size={32} />
+            </div>
+            <h3 className="text-2xl font-black text-white text-center mb-2 tracking-tight">AUTENTICAÇÃO</h3>
+            <p className="text-neutral-500 text-center text-xs font-bold uppercase tracking-widest mb-8">Credenciais Requeridas</p>
+            
+            <div className="space-y-4">
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-indigo-400 transition-colors">
+                  <Mail size={18} />
+                </div>
+                <input 
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Seu e-mail"
+                  required
+                  className="w-full pl-12 pr-4 py-4 bg-black/40 border border-neutral-800 focus:border-indigo-500 rounded-2xl text-sm font-medium transition-all outline-none"
+                />
+              </div>
+
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-indigo-400 transition-colors">
+                  <Lock size={18} />
+                </div>
+                <input 
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Sua senha"
+                  required
+                  className="w-full pl-12 pr-12 py-4 bg-black/40 border border-neutral-800 focus:border-indigo-500 rounded-2xl text-sm font-medium transition-all outline-none"
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              disabled={isLoginLoading}
+              className="w-full mt-8 py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 relative overflow-hidden group shadow-lg shadow-indigo-600/20"
+            >
+              {isLoginLoading ? (
+                <>
+                  <RefreshCw className="animate-spin" size={20} />
+                  <span>VERIFICANDO...</span>
+                </>
+              ) : (
+                <>
+                  <Play size={18} fill="currentColor" />
+                  <span>ACESSAR SISTEMA</span>
+                </>
+              )}
+            </button>
+            
+            <button 
+              type="button"
+              onClick={() => setShowLoginModal(false)}
+              className="w-full mt-3 py-3 text-neutral-500 hover:text-white text-xs font-bold uppercase transition-all"
+            >
+              Cancelar
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* Modal de Sucesso */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
