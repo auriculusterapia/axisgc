@@ -35,7 +35,8 @@ export default function FinancialPage() {
       const { data, error } = await (supabase as any)
         .from('appointments')
         .select('*')
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .range(0, 9999);
       
       if (error) throw error;
       if (data) setAppointments((data as any[]).map(mapAppointmentFromDB));

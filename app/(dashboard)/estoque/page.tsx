@@ -21,7 +21,8 @@ export default function InventoryPage() {
       const { data, error } = await supabase
         .from('inventory_items')
         .select('*')
-        .order('name');
+        .order('name')
+        .range(0, 9999);
       
       if (error) throw error;
       if (data) {

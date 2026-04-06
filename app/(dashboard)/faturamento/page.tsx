@@ -32,7 +32,8 @@ export default function BillingPage() {
           plan:insurance_plans(name),
           procedure:procedures(name, code)
         `)
-        .order('service_date', { ascending: false });
+        .order('service_date', { ascending: false })
+        .range(0, 9999);
 
       if (itemsError) throw itemsError;
 
@@ -53,8 +54,8 @@ export default function BillingPage() {
       ] = await Promise.all([
         (supabase as any).from('insurers').select('*').order('name'),
         (supabase as any).from('insurance_plans').select('*, insurer:insurers(name)').order('name'),
-        (supabase as any).from('procedures').select('*').order('name'),
-        (supabase as any).from('medical_supplies').select('*').order('name')
+        (supabase as any).from('procedures').select('*').order('name').range(0, 9999),
+        (supabase as any).from('medical_supplies').select('*').order('name').range(0, 9999)
       ]);
 
       if (insurersError) throw insurersError;
@@ -68,7 +69,8 @@ export default function BillingPage() {
         .select(`
           *,
           procedure:procedures(name, code)
-        `);
+        `)
+        .range(0, 9999);
 
       if (pricesError) throw pricesError;
 

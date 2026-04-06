@@ -44,7 +44,7 @@ export default function AuditLogsView({ user }: AuditLogsViewProps) {
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(5000);
 
       if (filterType !== 'ALL') {
         query = query.eq('entity_type', filterType);

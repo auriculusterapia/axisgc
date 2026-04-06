@@ -29,7 +29,8 @@ export default function PatientsPage() {
       const { data, error } = await supabase
         .from('patients')
         .select('*, patient_packages(status), insurance:patient_insurances(*, plan:insurance_plans(name, insurer:insurers(name)))')
-        .order('name');
+        .order('name')
+        .range(0, 9999);
       
       if (error) throw error;
       
