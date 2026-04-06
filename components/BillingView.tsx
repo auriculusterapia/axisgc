@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   FileText, 
   AlertCircle, 
@@ -22,6 +22,9 @@ import {
   TrendingUp,
   Zap,
   BarChart3,
+  Edit2,
+  RotateCcw,
+  Trash2,
   Edit3,
   AlertTriangle
 } from 'lucide-react';
@@ -81,8 +84,11 @@ export default function BillingView({
   const [isProcedureModalOpen, setIsProcedureModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [isManualItemModalOpen, setIsManualItemModalOpen] = useState(false);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Form states
@@ -97,6 +103,10 @@ export default function BillingView({
     service_date: new Date().toISOString().split('T')[0], 
     guia_number: '', 
     auth_number: '' 
+  });
+  const [batchForm, setBatchForm] = useState({
+    insurer_id: '',
+    competence: new Date().toISOString().substring(0, 7), // YYYY-MM
   });
 
   // Derived filtered lists for the search
@@ -211,22 +221,45 @@ export default function BillingView({
         competence,
         unit_value: Number(unit_value),
         total_presented_value: Number(unit_value),
-        status: 'pending',
         quantity: 1,
         created_by: user.id 
       };
 
-      const { error } = await (supabase as any).from('billing_items').insert([payload]);
-      if (error) throw error;
+      if (editingItem?.id && isManualItemModalOpen) {
+        const { error } = await (supabase as any)
+          .from('billing_items')
+          .update(payload)
+          .eq('id', editingItem.id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any)
+          .from('billing_items')
+          .insert([{ ...payload, status: 'pending' }]);
+        if (error) throw error;
+      }
       
       setIsManualItemModalOpen(false);
+      setEditingItem(null);
       setManualItemForm({ patient_id: '', insurance_plan_id: '', procedure_id: '', service_date: new Date().toISOString().split('T')[0], guia_number: '', auth_number: '' });
       if (onRefresh) onRefresh();
     } catch (error: any) {
-      console.error('Erro ao salvar item manual:', error);
-      alert('Erro ao criar Pendência TISS: ' + (error.message || 'Verifique os dados.'));
+      console.error('Erro ao salvar item:', error);
+      alert('Erro ao processar item: ' + (error.message || 'Verifique os dados.'));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    if (!supabase || !confirm('Tem certeza que deseja excluir esta pendência?')) return;
+    try {
+      const { error } = await (supabase as any).from('billing_items').delete().eq('id', itemId);
+      if (error) throw error;
+      if (onRefresh) onRefresh();
+      setActiveMenuId(null);
+    } catch (error) {
+      console.error('Erro ao excluir item:', error);
+      alert('Erro ao excluir item.');
     }
   };
 
@@ -278,6 +311,86 @@ export default function BillingView({
     setSelectedIds(next);
   };
 
+  const handleOpenBatchModal = () => {
+    if (selectedIds.size === 0) {
+      alert('Selecione ao menos um item para criar um lote.');
+      return;
+    }
+
+    // Validate that all selected items belong to the same insurer
+    const selectedItems = billingItems.filter(i => selectedIds.has(i.id));
+    const insurerIds = new Set(selectedItems.map(i => i.plan?.insurer_id).filter(Boolean));
+
+    if (insurerIds.size > 1) {
+      alert('Todos os itens de um lote devem pertencer à mesma operadora.');
+      return;
+    }
+
+    if (insurerIds.size === 0) {
+      alert('Não foi possível identificar a operadora dos itens selecionados.');
+      return;
+    }
+
+    const insurerId = Array.from(insurerIds)[0] as string;
+    setBatchForm({
+      insurer_id: insurerId,
+      competence: new Date().toISOString().substring(0, 7),
+    });
+    setIsBatchModalOpen(true);
+  };
+
+  const handleSaveBatch = async () => {
+    if (!supabase || !user) return;
+    setIsSaving(true);
+    try {
+      // 1. Calculate total value of selected items
+      const selectedItems = billingItems.filter(i => selectedIds.has(i.id));
+      const totalPresented = selectedItems.reduce((acc, i) => acc + Number(i.total_presented_value || 0), 0);
+
+      // 2. Create the batch
+      const { data: batch, error: batchError } = await (supabase as any)
+        .from('billing_batches')
+        .insert([{
+          insurer_id: batchForm.insurer_id,
+          competence: batchForm.competence,
+          status: 'open',
+          total_presented_value: totalPresented,
+          total_paid_value: 0,
+          created_by: user.id
+        }])
+        .select()
+        .single();
+
+      if (batchError) throw batchError;
+
+      // 3. Update items with the new batch_id and status 'ready_to_bill'
+      // We use RPC or multiple updates if the scale is small. 
+      // For now, let's update them all to 'ready_to_bill' or keep status? 
+      // The requirement says agrupá-los, usually billed items go to 'billed' status.
+      const { error: itemsError } = await (supabase as any)
+        .from('billing_items')
+        .update({ 
+          batch_id: batch.id,
+          status: 'ready_to_bill' // Ready to be sent to insurer
+        })
+        .in('id', Array.from(selectedIds));
+
+      if (itemsError) throw itemsError;
+
+      setIsBatchModalOpen(false);
+      setSelectedIds(new Set());
+      if (onRefresh) onRefresh();
+    } catch (error: any) {
+      console.error('Erro ao criar lote:', error);
+      alert('Erro ao criar lote: ' + (error.message || 'Verifique sua conexão.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Renaming my handleSaveBatch back to handleCreateBatch or merging
+  // Wait, I'll just use the existing handleCreateBatch implementation but with the modal data
+
   const canGenerateBatch = () => {
     if (selectedIds.size === 0) return false;
     const items = billingItems.filter(i => selectedIds.has(i.id));
@@ -292,44 +405,45 @@ export default function BillingView({
   };
 
   const handleCreateBatch = async () => {
-    if (!supabase || !user || !canGenerateBatch()) return;
+    if (!supabase || !user) return;
     setIsSaving(true);
     try {
-      const items = billingItems.filter(i => selectedIds.has(i.id));
-      const insurerId = items[0]?.plan?.insurer_id || items[0]?.insurance_plan_id;
-      const totalValue = items.reduce((acc, i) => acc + Number(i.total_presented_value || 0), 0);
-      const now = new Date();
-      const competence = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const selectedItems = billingItems.filter(i => selectedIds.has(i.id));
+      const totalPresented = selectedItems.reduce((acc, i) => acc + Number(i.total_presented_value || 0), 0);
+      const insurer = insurers.find(ins => ins.id === batchForm.insurer_id);
 
-      // 1. Criar o lote
       const { data: batch, error: batchError } = await (supabase as any)
         .from('billing_batches')
         .insert([{
-          insurer_id: insurerId,
-          competence,
+          insurer_id: batchForm.insurer_id,
+          competence: batchForm.competence,
           status: 'open',
-          total_presented_value: totalValue,
-          total_paid_value: 0
+          total_presented_value: totalPresented,
+          total_paid_value: 0,
+          created_by: user.id
         }])
         .select()
         .single();
 
       if (batchError) throw batchError;
 
-      // 2. Vincular itens ao lote e mudar status
-      const { error: linkError } = await (supabase as any)
+      const { error: itemsError } = await (supabase as any)
         .from('billing_items')
-        .update({ batch_id: batch.id, status: 'billed' })
+        .update({ 
+          batch_id: batch.id,
+          status: 'billed' 
+        })
         .in('id', Array.from(selectedIds));
 
-      if (linkError) throw linkError;
+      if (itemsError) throw itemsError;
 
+      setIsBatchModalOpen(false);
       setSelectedIds(new Set());
       if (onRefresh) onRefresh();
-      alert(`Lote #${batch.id.substring(0,8)} criado com sucesso para ${items[0]?.plan?.insurer?.name || 'Operadora'}`);
+      alert(`Lote #${batch.id.substring(0,8)} criado com sucesso para ${insurer?.name || 'Operadora'}`);
     } catch (error: any) {
       console.error('Erro ao criar lote:', error);
-      alert('Erro ao criar lote: ' + (error.message || 'Ocorreu um erro inesperado.'));
+      alert('Erro ao criar lote: ' + (error.message || 'Verifique sua conexão.'));
     } finally {
       setIsSaving(false);
     }
@@ -504,7 +618,10 @@ export default function BillingView({
             </button>
           )}
           {activeTab === 'pendencies' && (
-            <button className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-primary/20">
+            <button 
+              onClick={handleOpenBatchModal}
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-primary/20"
+            >
               <Plus size={20} />
               <span>Novo Lote</span>
             </button>
@@ -727,9 +844,77 @@ export default function BillingView({
                                     </button>
                                   </>
                                 )}
-                                <button className="p-2 hover:bg-surface-container rounded-xl transition-all text-on-surface-variant">
-                                  <MoreVertical size={18} />
-                                </button>
+                                <div className="relative">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveMenuId(activeMenuId === item.id ? null : item.id);
+                                    }}
+                                    className="p-2 hover:bg-surface-container rounded-xl transition-all text-on-surface-variant active:scale-95"
+                                  >
+                                    <MoreVertical size={18} />
+                                  </button>
+
+                                  <AnimatePresence>
+                                    {activeMenuId === item.id && (
+                                      <>
+                                        <div 
+                                          className="fixed inset-0 z-[80]" 
+                                          onClick={() => setActiveMenuId(null)}
+                                        />
+                                        <motion.div
+                                          initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                                          exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                          className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-outline-variant/10 py-2 z-[90] overflow-hidden"
+                                        >
+                                          <button 
+                                            onClick={() => {
+                                              setEditingItem(item);
+                                              setManualItemForm({
+                                                patient_id: item.patient_id,
+                                                insurance_plan_id: item.insurance_plan_id,
+                                                procedure_id: item.procedure_id,
+                                                service_date: item.service_date,
+                                                guia_number: item.guia_number || '',
+                                                auth_number: item.auth_number || ''
+                                              });
+                                              setIsManualItemModalOpen(true);
+                                              setActiveMenuId(null);
+                                            }}
+                                            className="w-full px-4 py-2.5 text-left text-sm font-bold text-on-surface hover:bg-surface-container-low transition-all flex items-center gap-2"
+                                          >
+                                            <Edit2 size={16} className="text-primary" />
+                                            Editar Guia
+                                          </button>
+
+                                          {item.status !== 'pending' && (
+                                            <button 
+                                              onClick={() => {
+                                                handleUpdateItemStatus(item.id, 'pending');
+                                                setActiveMenuId(null);
+                                              }}
+                                              className="w-full px-4 py-2.5 text-left text-sm font-bold text-on-surface hover:bg-surface-container-low transition-all flex items-center gap-2"
+                                            >
+                                              <RotateCcw size={16} className="text-amber-500" />
+                                              Voltar p/ Pendente
+                                            </button>
+                                          )}
+
+                                          <div className="h-px bg-outline-variant/10 my-1" />
+
+                                          <button 
+                                            onClick={() => handleDeleteItem(item.id)}
+                                            className="w-full px-4 py-2.5 text-left text-sm font-bold text-rose-600 hover:bg-rose-50 transition-all flex items-center gap-2"
+                                          >
+                                            <Trash2 size={16} />
+                                            Excluir
+                                          </button>
+                                        </motion.div>
+                                      </>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
                               </div>
                             </td>
                           </tr>
@@ -1522,7 +1707,9 @@ export default function BillingView({
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsManualItemModalOpen(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden p-8 max-h-[90vh] overflow-y-auto">
-              <h3 className="text-2xl font-black text-on-surface mb-6">Novo Item de Faturamento Manual</h3>
+              <h3 className="text-2xl font-black text-on-surface mb-6">
+                {editingItem?.id ? 'Editar Item de Faturamento' : 'Novo Item de Faturamento Manual'}
+              </h3>
               <div className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1569,7 +1756,7 @@ export default function BillingView({
                 <div className="flex gap-3 pt-2">
                   <button onClick={() => setIsManualItemModalOpen(false)} className="flex-1 py-4 border border-outline-variant/30 text-on-surface font-bold rounded-2xl hover:bg-surface-container-low transition-all">Cancelar</button>
                   <button onClick={handleSaveManualItem} disabled={isSaving || !manualItemForm.patient_id || !manualItemForm.insurance_plan_id || !manualItemForm.procedure_id} className="flex-[2] py-4 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
-                    {isSaving ? 'Salvando...' : 'Adicionar Atendimento'}
+                    {isSaving ? 'Salvando...' : editingItem?.id ? 'Salvar Alterações' : 'Adicionar Atendimento'}
                   </button>
                 </div>
               </div>
@@ -1615,7 +1802,7 @@ export default function BillingView({
                 </button>
 
                 <button 
-                  onClick={handleCreateBatch}
+                  onClick={handleOpenBatchModal}
                   disabled={isSaving || !canGenerateBatch()}
                   className={cn(
                     "flex items-center gap-2 px-5 py-3 font-bold rounded-2xl transition-all group",
@@ -1637,6 +1824,95 @@ export default function BillingView({
               </div>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: NOVO LOTE */}
+      <AnimatePresence>
+        {isBatchModalOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setIsBatchModalOpen(false)} 
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+              className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden p-8"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-14 h-14 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
+                  <Package size={28} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-on-surface">Criar Novo Lote</h3>
+                  <p className="text-sm text-on-surface-variant font-medium">Agrupar guias para envio</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-surface-container-low p-6 rounded-3xl border border-outline-variant/10 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-outline uppercase tracking-widest">Itens Selecionados</span>
+                    <span className="font-black text-on-surface">{selectedIds.size} guias</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-3 border-t border-outline-variant/10">
+                    <span className="text-xs font-bold text-outline uppercase tracking-widest">Valor Total</span>
+                    <span className="text-xl font-black text-primary">
+                      R$ {billingItems.filter(i => selectedIds.has(i.id)).reduce((acc, i) => acc + Number(i.total_presented_value || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest ml-1">Operadora</label>
+                    <div className="w-full px-4 py-4 bg-surface-container rounded-2xl border border-outline-variant/20 text-on-surface font-bold flex items-center gap-3">
+                      <Building2 size={18} className="text-primary" />
+                      {insurers.find(ins => ins.id === batchForm.insurer_id)?.name || 'Operadora não identificada'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-outline uppercase tracking-widest ml-1">Competência (Mês/Ano)</label>
+                    <input 
+                      type="month" 
+                      value={batchForm.competence}
+                      onChange={(e) => setBatchForm({ ...batchForm, competence: e.target.value })}
+                      className="w-full px-4 py-4 bg-white border border-outline-variant/30 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all font-bold text-on-surface"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setIsBatchModalOpen(false)} 
+                    className="flex-1 py-4 text-on-surface font-bold rounded-2xl hover:bg-surface-container transition-all"
+                  >
+                    Descartar
+                  </button>
+                  <button 
+                    onClick={handleCreateBatch}
+                    disabled={isSaving}
+                    className="flex-[2] py-4 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    {isSaving ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Check size={20} />
+                        <span>Confirmar Lote</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

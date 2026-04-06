@@ -190,9 +190,9 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
   };
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-4">
+        <div key="patient-modal-overlay" className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-4">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -368,8 +368,8 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
                           className="w-full pl-12 pr-5 py-4 bg-surface-container-low rounded-xl border border-outline-variant/10 focus:ring-2 focus:ring-primary/20 outline-none font-medium appearance-none"
                         >
                           <option value="">Particular / Nenhuma</option>
-                          {insurers.map(insurer => (
-                            <option key={insurer.id} value={insurer.id}>{insurer.name}</option>
+                          {insurers.map((insurer, idx) => (
+                            <option key={insurer.id || `ins-${idx}`} value={insurer.id}>{insurer.name}</option>
                           ))}
                         </select>
                       </div>
@@ -459,8 +459,8 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
                     <h4 className="text-sm font-black text-on-surface uppercase tracking-wider">Informações Adicionais (Planilha)</h4>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(formData.metadata).map(([key, value]) => (
-                      <div key={key} className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/5">
+                    {Object.entries(formData.metadata).map(([key, value], index) => (
+                      <div key={key || `meta-${index}`} className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/5">
                         <label className="text-[10px] font-black text-outline uppercase tracking-widest block mb-1">{key}</label>
                         <p className="text-sm font-bold text-on-surface truncate">{String(value)}</p>
                       </div>
@@ -498,7 +498,7 @@ export default function PatientModal({ isOpen, onClose, onSave, editingPatient }
       )}
 
       {isNewInsurerModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div key="new-insurer-modal-overlay" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-sm m-4">
             <h4 className="font-bold text-lg mb-4 text-on-surface">Nova Operadora</h4>
             <input 
