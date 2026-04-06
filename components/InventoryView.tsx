@@ -554,9 +554,9 @@ export default function InventoryView({
                       required
                       type="number" 
                       min="0"
-                      step="0.01"
+                      step="1"
                       value={itemFormData.min_quantity}
-                      onChange={e => setItemFormData({...itemFormData, min_quantity: parseFloat(e.target.value)})}
+                      onChange={e => setItemFormData({...itemFormData, min_quantity: parseInt(e.target.value) || 0})}
                       className="w-full px-5 py-4 bg-rose-50 rounded-xl border border-rose-100 focus:ring-2 focus:ring-rose-200 outline-none font-medium text-rose-900"
                     />
                   </div>
