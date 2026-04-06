@@ -154,7 +154,7 @@ export default function Home() {
       const keywordsMap: Record<Category, string[]> = {
         procedures: ["codigo", "termo", "tuss", "procedimento", "code", "name", "service", "servico"],
         medical_supplies: ["codigo", "anvisa", "laboratorio", "produto", "apresentacao", "code", "material", "med", "brand", "lote", "batch", "fabricante", "manufacturer"],
-        inventory: ["nome", "quantidade", "estoque", "unidade", "custo", "validade", "name", "quantity", "stock", "unit", "cost", "expiry", "lote", "batch", "fabricante", "manufacturer"],
+        inventory: ["nome", "quantidade", "estoque", "unidade", "custo", "validade", "alerta", "minimo", "name", "quantity", "stock", "min", "limit", "alert", "unit", "cost", "expiry", "lote", "batch", "fabricante", "manufacturer"],
         patients: ["nome", "idade", "sexo", "telefone", "celular", "email", "endereco", "cpf", "name", "age", "gender", "phone", "mail", "address"]
       };
 
@@ -222,6 +222,7 @@ export default function Home() {
         colMap.category = getIdx(["categoria", "grupo", "category", "type"]);
         colMap.unit_cost = getIdx(["custo", "preco", "valor", "cost", "price", "unit cost"]);
         colMap.expiry_date = getIdx(["validade", "vencimento", "expiry", "expire"]);
+        colMap.min_quantity = getIdx(["alerta", "minimo", "min", "limit", "alert"]);
         colMap.batch = getIdx(["lote", "batch", "partida", "serie"]);
         colMap.manufacturer = getIdx(["fabricante", "marca", "manufacturer", "brand"]);
       } else if (activeTab === "patients") {
@@ -349,6 +350,7 @@ export default function Home() {
             category: row.category?.toString() || "Geral",
             unit_cost: parseFloat(row.unit_cost) || 0,
             expiry_date: excelDateToISO(row.expiry_date),
+            min_quantity: parseFloat(row.min_quantity) || 0,
             batch: row.batch?.toString(),
             manufacturer: row.manufacturer?.toString()
           };

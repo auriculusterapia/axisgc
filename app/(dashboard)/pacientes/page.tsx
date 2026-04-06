@@ -26,13 +26,26 @@ export default function PatientsPage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      console.log('Buscando pacientes...');
+      // Tentativa 1: Query completa com joins (Convênios e Pacotes)
+      let { data, error } = await supabase
         .from('patients')
         .select('*, patient_packages(status), insurance:patient_insurances(*, plan:insurance_plans(name, insurer:insurers(name)))')
         .order('name')
         .range(0, 9999);
       
-      if (error) throw error;
+      // Se falhar (provavelmente por tabelas inexistentes), tenta Fallback (Query simples apenas na tabela patients)
+      if (error) {
+        console.warn('Erro na busca completa de pacientes, tentando fallback simples:', error.message);
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('patients')
+          .select('*')
+          .order('name')
+          .range(0, 9999);
+        
+        if (fallbackError) throw fallbackError;
+        data = fallbackData;
+      }
       
       if (data) {
         setPatients(data.map(p => ({
@@ -40,15 +53,16 @@ export default function PatientsPage() {
           maritalStatus: p.marital_status || 'Solteiro(a)',
           avatar: p.avatar_url || '',
           lastVisit: p.last_visit || 'N/A',
-          hasActivePackage: Array.isArray(p.patient_packages) && p.patient_packages.some((pkg: any) => pkg.status === 'active'),
+          hasActivePackage: Array.isArray(p.patient_packages) && (p as any).patient_packages.some((pkg: any) => pkg.status === 'active'),
           // Map insurance data back to the format the modal expects
           insurancePlanId: (p as any).insurance?.plan_id || '',
           insuranceCardNumber: (p as any).insurance?.card_number || '',
           insuranceValidity: (p as any).insurance?.validity_date || ''
         })));
       }
-    } catch (error) {
-      console.error('Erro ao buscar pacientes:', error);
+    } catch (error: any) {
+      console.error('Erro crítico ao buscar pacientes:', error);
+      alert('Erro ao carregar lista de pacientes: ' + (error.message || 'Erro desconhecido'));
     } finally {
       setLoading(false);
     }

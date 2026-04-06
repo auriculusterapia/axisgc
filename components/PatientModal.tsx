@@ -1,12 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Check, User, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
+import { X, Check, User, CreditCard, ShieldCheck, AlertCircle, Info, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getInitials } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { InsurancePlan, Insurer } from '@/types/billing';
-import { Plus } from 'lucide-react';
 
 interface Patient {
   id: string;

@@ -220,6 +220,24 @@ export default function Home() {
     }
     setIsDataLoading(true);
     try {
+      // Definimos as promessas individualmente para tratar erros de tabelas possivelmente inexistentes
+      const patientsQuery = (supabase as any).from('patients')
+        .select('*, patient_packages(status), insurance:patient_insurances(*)')
+        .order('name')
+        .then((res: any) => res.error ? (supabase as any).from('patients').select('*').order('name') : res);
+
+      const packagesQuery = (supabase as any).from('patient_packages').select('*').order('date', { ascending: false })
+        .then((res: any) => res.error ? { data: [], error: null } : res);
+
+      const insurersQuery = (supabase as any).from('insurers').select('*').order('name')
+        .then((res: any) => res.error ? { data: [], error: null } : res);
+
+      const insurancePlansQuery = (supabase as any).from('insurance_plans').select('*').order('name')
+        .then((res: any) => res.error ? { data: [], error: null } : res);
+      
+      const insurancePricesQuery = (supabase as any).from('insurance_prices').select('*, procedure:procedures(*), plan:insurance_plans(*)')
+        .then((res: any) => res.error ? { data: [], error: null } : res);
+
       const [
         { data: patientsData },
         { data: appointmentsData },
@@ -237,19 +255,19 @@ export default function Home() {
         { data: proceduresData },
         { data: medicalSuppliesData }
       ] = await Promise.all([
-        (supabase as any).from('patients').select('*, patient_packages(status), insurance:patient_insurances(*)').order('name'),
+        patientsQuery,
         (supabase as any).from('appointments').select('*').order('date', { ascending: false }),
         (supabase as any).from('consultations').select('*').order('date', { ascending: false }),
         (supabase as any).from('evaluations').select('*').order('date', { ascending: false }),
         (supabase as any).from('protocols').select('*').order('name'),
         (supabase as any).from('inventory_items').select('*').order('name'),
-        (supabase as any).from('patient_packages').select('*').order('date', { ascending: false }),
+        packagesQuery,
         (supabase as any).from('financial_transactions').select('*').order('date', { ascending: false }),
         (supabase as any).from('billing_items').select('*, patient:patients(*), procedure:procedures(*)').order('created_at', { ascending: false }),
         (supabase as any).from('billing_batches').select('*, insurer:insurers(*)').order('created_at', { ascending: false }),
-        (supabase as any).from('insurers').select('*').order('name'),
-        (supabase as any).from('insurance_plans').select('*').order('name'),
-        (supabase as any).from('insurance_prices').select('*, procedure:procedures(*), plan:insurance_plans(*)'),
+        insurersQuery,
+        insurancePlansQuery,
+        insurancePricesQuery,
         (supabase as any).from('procedures').select('*').order('code'),
         (supabase as any).from('medical_supplies').select('*').order('name')
       ]);

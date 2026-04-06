@@ -40,25 +40,41 @@ function AgendaContent() {
     if (!supabase) return;
     setLoading(true);
     try {
+      console.log('Buscando dados da agenda (Agendamentos e Pacientes)...');
+      
+      // Buscamos pacotes separadamente para não quebrar a agenda se a tabela estiver ausente
+      const fetchPackages = async () => {
+        try {
+          const { data, error } = await supabase.from('patient_packages').select('*').eq('status', 'active');
+          if (error) {
+            console.warn('Tabela patient_packages não encontrada ou erro de RLS. Agenda continuará sem pacotes ativos.');
+            return [];
+          }
+          return data || [];
+        } catch (e) {
+          return [];
+        }
+      };
+
       const [
         { data: appData, error: appError },
         { data: patsData, error: patsError },
-        { data: pkgsData, error: pkgsError }
+        pkgsData
       ] = await Promise.all([
         supabase.from('appointments').select('*').order('date', { ascending: false }),
         supabase.from('patients').select('id, name').order('name'),
-        supabase.from('patient_packages').select('*').eq('status', 'active')
+        fetchPackages()
       ]);
 
       if (appError) throw appError;
       if (patsError) throw patsError;
-      if (pkgsError) throw pkgsError;
 
       if (appData) setAppointments(appData.map(mapAppointmentFromDB));
       if (patsData) setPatients(patsData);
-      if (pkgsData) setPackages(pkgsData);
-    } catch (error) {
+      setPackages(pkgsData);
+    } catch (error: any) {
       console.error('Erro ao buscar dados da agenda:', error);
+      alert('Aviso: Alguns dados da agenda não puderam ser carregados. ' + (error.message || ''));
     } finally {
       setLoading(false);
     }
